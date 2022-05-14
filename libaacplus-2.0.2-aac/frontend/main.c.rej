@@ -1,0 +1,141 @@
+--- frontend/main.c	2021-10-21 20:06:47.082326900 +0700
++++ frontend/main.c	2021-10-24 21:30:58.519900700 +0700
+@@ -18,12 +18,13 @@
+   int  error;
+   int  bEncodeMono = 0;
+   int frmCnt = 0;
++  unsigned int aacLC = 0;
+ 
+    /*
+    * parse command line arguments
+    */
+-  if (argc != 5) {
+-    fprintf(stderr, "\nUsage:   %s <wav_file> <bitstream_file> <bitrate> <(m)ono/(s)tereo>\n", argv[0]);
++  if (argc < 5) {
++    fprintf(stderr, "\nUsage:   %s <wav_file> <bitstream_file> <bitrate> <(m)ono/(s)tereo> <lc>\n", argv[0]);
+     fprintf(stderr, "\nExample: %s input.wav out.aac 24000 s\n", argv[0]);
+     return 0;
+   }
+@@ -37,6 +38,14 @@
+       return 0;
+     }
+   }
++   
++  if (argc > 5) {    
++    if ( strcmp (argv[5],"lc") != 0 ) {
++      fprintf(stderr, "\nLow-Complexity mode\n");
++      aacLC = 1;
++    }
++  }
++
+   fflush(stdout);
+ 
+   inputFile = AuChannelOpen (argv[1], &inputInfo);
+@@ -66,10 +75,12 @@
+    */
+   unsigned long inputSamples=0;
+   unsigned long maxOutputBytes=0;
+-  aacplusEncHandle hEncoder = aacplusEncOpen(inputInfo.sampleRate,
++  aacplusEncHandle hEncoder = aacplusEncOpenW(inputInfo.sampleRate,
+ 		  	  inputInfo.nChannels,
+ 		  	  &inputSamples,
+-		  	  &maxOutputBytes);
++		  	  &maxOutputBytes, !aacLC);
++
++  //inputSamples /= 2;
+ 
+   aacplusEncConfiguration *cfg = aacplusEncGetCurrentConfiguration(hEncoder);
+   cfg->bitRate = atoi(argv[3]);
+@@ -94,12 +105,26 @@
+ 
+   uint8_t *outputBuffer = malloc(maxOutputBytes);
+   int32_t *TimeDataPcm;
++  int32_t *blank_samples = calloc(inputSamples, sizeof(float));
++  memset(blank_samples, 0, inputSamples);
++
+   if(inputInfo.aFmt == WAV_FORMAT_FLOAT) {
+     TimeDataPcm = calloc(inputSamples, sizeof(float));
+   } else {
+     TimeDataPcm = calloc(inputSamples, sizeof(short));
+   }
+ 
++  unsigned long extra_data;
++  unsigned char *extra_data_bytes;
++  if (aacplusEncGetDecoderSpecificInfo(hEncoder, &extra_data_bytes,
++                                           &extra_data) == 1) {
++      fprintf(stderr, "AAC Extra Data:\n");
++      for (int ed = 0; ed<extra_data; ed++) {
++        fprintf(stderr, "%02x ", extra_data_bytes[ed]);
++      }
++      fprintf(stderr, "\n\n");
++  }
++
+   int stopLoop = 0;
+   int bytes = 0;
+   do {
+@@ -116,21 +141,61 @@
+           }
+       }
+ 
+-      if(numSamplesRead < inputSamples) {
+-          stopLoop = 1;
+-          break;
++      /*
++      for (int i = 0; i<numSamplesRead; i++) {
++        printf("%02x", TimeDataPcm[i]);
+       }
++      printf("\n\n");
++      */
+ 
+       bytes = aacplusEncEncode(hEncoder, (int32_t *) TimeDataPcm, numSamplesRead,
+               outputBuffer,
+               maxOutputBytes);
++      
++      if(bytes > 0) {
++        //fprintf(stderr, "HAS DATA\n");
++        fwrite(outputBuffer, bytes, 1, hADTSFile);
++      }/* else {
++        fprintf(stderr, "needed %d data - %d frames\n", aacplusEncGetRequiredFrames(hEncoder), aacplusEncGetRequiredFrames(hEncoder)/inputInfo.nChannels);
++      }*/
+ 
+-      if(bytes > 0) fwrite(outputBuffer, bytes, 1, hADTSFile);
++      if(numSamplesRead < inputSamples) {
++          stopLoop = 1;
++          break;
++      }
+ 
+       frmCnt++;
+       fprintf(stderr,"[%d]\r",frmCnt); fflush(stderr);
+   } while (!stopLoop && bytes >= 0);
+ 
++  do {
++  bytes = aacplusEncEncode(hEncoder, NULL, 0,
++          outputBuffer,
++          maxOutputBytes);
++  
++  if (bytes > 0) {
++    fprintf(stderr, "Flushing %d bytes..\n", bytes);
++    fwrite(outputBuffer, bytes, 1, hADTSFile);
++  }
++
++  } while (bytes > 0);
++
++  /*
++  for (int loop = 0; loop < 1; loop++) {
++
++    bytes = aacplusEncEncode(hEncoder, (int32_t *) blank_samples, inputSamples,
++            outputBuffer,
++            maxOutputBytes);
++    
++    if(bytes > 0) {
++      //fprintf(stderr, "HAS DATA\n");
++      fprintf(stderr, "Padding %d bytes..\n", bytes);
++      fwrite(outputBuffer, bytes, 1, hADTSFile);
++    }
++
++  }
++  */
++
+   fprintf(stderr,"\n");
+   fflush(stderr);
+ 

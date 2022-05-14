@@ -1,0 +1,11 @@
+aacplusEncGetCurrentConfiguration
+aacplusEncSetConfiguration
+aacplusEncOpen
+aacplusEncOpenW
+aacplusEncGetDecoderSpecificInfo
+aacplusEncGetRequiredFrames
+aacplusEncGetDelay
+aacplusEncGetTotalDelay
+aacplusEncEncode
+aacplusEncEncodeW
+aacplusEncClose

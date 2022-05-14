@@ -1,0 +1,49 @@
+--- include/aacplus.h	2021-10-21 20:06:45.318832500 +0700
++++ include/aacplus.h	2021-10-23 21:32:03.451710800 +0700
+@@ -26,6 +26,7 @@
+   int   outputFormat;            ///< 0 - raw, 1 - adts
+   int   nSamplesPerFrame;        ///< 1024 by default, (960 - for dab+/drm not working yet)
+   int   inputSamples;            ///< number of input samples to use, usable after aacplusEncSetConfiguration() call
++  int   heV2Override;  
+ } aacplusEncConfiguration;
+ 
+ aacplusEncConfiguration *aacplusEncGetCurrentConfiguration(aacplusEncHandle hEncoder);
+@@ -34,21 +35,38 @@
+ int aacplusEncSetConfiguration(aacplusEncHandle hEncoder,
+         aacplusEncConfiguration *cfg);
+ 
++int aacplusEncSetConfigurationLC(aacplusEncHandle hEncoder,
++        aacplusEncConfiguration *cfg);
++
++int aacplusEncSetConfigurationSBR(aacplusEncHandle hEncoder,
++        aacplusEncConfiguration *cfg);        
+ 
+ aacplusEncHandle aacplusEncOpen(unsigned long sampleRate,
+ 				  unsigned int numChannels,
+ 				  unsigned long *inputSamples,
+ 				  unsigned long *maxOutputBytes);
+ 
++aacplusEncHandle aacplusEncOpenW(unsigned long sampleRate,
++          unsigned int numChannels,
++          unsigned long *inputSamples,
++          unsigned long *maxOutputBytes, unsigned int aacplus);
+ 
+ int aacplusEncGetDecoderSpecificInfo(aacplusEncHandle hEncoder, unsigned char **ppBuffer,
+ 					  unsigned long *pSizeOfDecoderSpecificInfo);
+ 
++int aacplusEncGetRequiredFrames(aacplusEncHandle hEncoder);
++
++int aacplusEncGetDelay(aacplusEncHandle hEncoder);
++int aacplusEncGetTotalDelay(aacplusEncHandle hEncoder);
+ 
+ int aacplusEncEncode(aacplusEncHandle hEncoder, int32_t *inputBuffer, unsigned int samplesInput,
+ 			 unsigned char *outputBuffer,
+ 			 unsigned int bufferSize);
+ 
++int aacplusEncEncodeW(aacplusEncHandle hEncoder, int32_t *inputBuffer, unsigned int samplesInput,
++                        unsigned char *outputBuffer,
++                        unsigned int bufferSize, unsigned int dopadding);                     
++
+ 
+ int aacplusEncClose(aacplusEncHandle hEncoder);
+ 

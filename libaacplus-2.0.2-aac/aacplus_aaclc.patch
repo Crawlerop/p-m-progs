@@ -1,0 +1,1391 @@
+Only in libaacplus/: aacplus.pc.bin
+diff -r -u libaacplus_original/aacplus.pc.in libaacplus/aacplus.pc.in
+--- libaacplus_original/aacplus.pc.in	2021-10-21 20:06:47.066323300 +0700
++++ libaacplus/aacplus.pc.in	2021-10-23 11:34:05.310527200 +0700
+@@ -3,13 +3,12 @@
+ libdir=@libdir@
+ includedir=@includedir@/aacplus
+ toolsdir=${exec_prefix}/bin
+-cppflags=@AACPLUS_CPPFLAGS@
+-cflags_only=@AACPLUS_CFLAGS@
++#cppflags=@AACPLUS_CPPFLAGS@
++#cflags_only=@AACPLUS_CFLAGS@
+ 
+ 
+ Name: aacplus
+ Description: AAC+ encoder library
+-Requires: @AACPLUS_REQUIRES@
+ Version: @VERSION@
+-Libs: @AACPLUS_LIBS@
++Libs: -L${libdir} @AACPLUS_LIBS@
+ Cflags: -I${includedir} @AACPLUS_CFLAGS@
+Only in libaacplus/: aacplus.pc.t
+Only in libaacplus/: bs.aac
+Only in libaacplus/: bs2.aac
+Only in libaacplus/: extradata.bin.aac
+Only in libaacplus/frontend: .libs
+Only in libaacplus/frontend: aacplusenc
+diff -r -u libaacplus_original/frontend/main.c libaacplus/frontend/main.c
+--- libaacplus_original/frontend/main.c	2021-10-21 20:06:47.082326900 +0700
++++ libaacplus/frontend/main.c	2021-10-24 21:30:58.519900700 +0700
+@@ -18,12 +18,13 @@
+   int  error;
+   int  bEncodeMono = 0;
+   int frmCnt = 0;
++  unsigned int aacLC = 0;
+ 
+    /*
+    * parse command line arguments
+    */
+-  if (argc != 5) {
+-    fprintf(stderr, "\nUsage:   %s <wav_file> <bitstream_file> <bitrate> <(m)ono/(s)tereo>\n", argv[0]);
++  if (argc < 5) {
++    fprintf(stderr, "\nUsage:   %s <wav_file> <bitstream_file> <bitrate> <(m)ono/(s)tereo> <lc>\n", argv[0]);
+     fprintf(stderr, "\nExample: %s input.wav out.aac 24000 s\n", argv[0]);
+     return 0;
+   }
+@@ -37,6 +38,14 @@
+       return 0;
+     }
+   }
++   
++  if (argc > 5) {    
++    if ( strcmp (argv[5],"lc") != 0 ) {
++      fprintf(stderr, "\nLow-Complexity mode\n");
++      aacLC = 1;
++    }
++  }
++
+   fflush(stdout);
+ 
+   inputFile = AuChannelOpen (argv[1], &inputInfo);
+@@ -66,10 +75,12 @@
+    */
+   unsigned long inputSamples=0;
+   unsigned long maxOutputBytes=0;
+-  aacplusEncHandle hEncoder = aacplusEncOpen(inputInfo.sampleRate,
++  aacplusEncHandle hEncoder = aacplusEncOpenW(inputInfo.sampleRate,
+ 		  	  inputInfo.nChannels,
+ 		  	  &inputSamples,
+-		  	  &maxOutputBytes);
++		  	  &maxOutputBytes, !aacLC);
++
++  //inputSamples /= 2;
+ 
+   aacplusEncConfiguration *cfg = aacplusEncGetCurrentConfiguration(hEncoder);
+   cfg->bitRate = atoi(argv[3]);
+@@ -94,12 +105,26 @@
+ 
+   uint8_t *outputBuffer = malloc(maxOutputBytes);
+   int32_t *TimeDataPcm;
++  int32_t *blank_samples = calloc(inputSamples, sizeof(float));
++  memset(blank_samples, 0, inputSamples);
++
+   if(inputInfo.aFmt == WAV_FORMAT_FLOAT) {
+     TimeDataPcm = calloc(inputSamples, sizeof(float));
+   } else {
+     TimeDataPcm = calloc(inputSamples, sizeof(short));
+   }
+ 
++  unsigned long extra_data;
++  unsigned char *extra_data_bytes;
++  if (aacplusEncGetDecoderSpecificInfo(hEncoder, &extra_data_bytes,
++                                           &extra_data) == 1) {
++      fprintf(stderr, "AAC Extra Data:\n");
++      for (int ed = 0; ed<extra_data; ed++) {
++        fprintf(stderr, "%02x ", extra_data_bytes[ed]);
++      }
++      fprintf(stderr, "\n\n");
++  }
++
+   int stopLoop = 0;
+   int bytes = 0;
+   do {
+@@ -116,21 +141,61 @@
+           }
+       }
+ 
+-      if(numSamplesRead < inputSamples) {
+-          stopLoop = 1;
+-          break;
++      /*
++      for (int i = 0; i<numSamplesRead; i++) {
++        printf("%02x", TimeDataPcm[i]);
+       }
++      printf("\n\n");
++      */
+ 
+       bytes = aacplusEncEncode(hEncoder, (int32_t *) TimeDataPcm, numSamplesRead,
+               outputBuffer,
+               maxOutputBytes);
++      
++      if(bytes > 0) {
++        //fprintf(stderr, "HAS DATA\n");
++        fwrite(outputBuffer, bytes, 1, hADTSFile);
++      }/* else {
++        fprintf(stderr, "needed %d data - %d frames\n", aacplusEncGetRequiredFrames(hEncoder), aacplusEncGetRequiredFrames(hEncoder)/inputInfo.nChannels);
++      }*/
+ 
+-      if(bytes > 0) fwrite(outputBuffer, bytes, 1, hADTSFile);
++      if(numSamplesRead < inputSamples) {
++          stopLoop = 1;
++          break;
++      }
+ 
+       frmCnt++;
+       fprintf(stderr,"[%d]\r",frmCnt); fflush(stderr);
+   } while (!stopLoop && bytes >= 0);
+ 
++  do {
++  bytes = aacplusEncEncode(hEncoder, NULL, 0,
++          outputBuffer,
++          maxOutputBytes);
++  
++  if (bytes > 0) {
++    fprintf(stderr, "Flushing %d bytes..\n", bytes);
++    fwrite(outputBuffer, bytes, 1, hADTSFile);
++  }
++
++  } while (bytes > 0);
++
++  /*
++  for (int loop = 0; loop < 1; loop++) {
++
++    bytes = aacplusEncEncode(hEncoder, (int32_t *) blank_samples, inputSamples,
++            outputBuffer,
++            maxOutputBytes);
++    
++    if(bytes > 0) {
++      //fprintf(stderr, "HAS DATA\n");
++      fprintf(stderr, "Padding %d bytes..\n", bytes);
++      fwrite(outputBuffer, bytes, 1, hADTSFile);
++    }
++
++  }
++  */
++
+   fprintf(stderr,"\n");
+   fflush(stderr);
+ 
+Only in libaacplus/frontend: main.o
+diff -r -u libaacplus_original/include/aacplus.h libaacplus/include/aacplus.h
+--- libaacplus_original/include/aacplus.h	2021-10-21 20:06:45.318832500 +0700
++++ libaacplus/include/aacplus.h	2021-10-23 21:32:03.451710800 +0700
+@@ -26,6 +26,7 @@
+   int   outputFormat;            ///< 0 - raw, 1 - adts
+   int   nSamplesPerFrame;        ///< 1024 by default, (960 - for dab+/drm not working yet)
+   int   inputSamples;            ///< number of input samples to use, usable after aacplusEncSetConfiguration() call
++  int   heV2Override;  
+ } aacplusEncConfiguration;
+ 
+ aacplusEncConfiguration *aacplusEncGetCurrentConfiguration(aacplusEncHandle hEncoder);
+@@ -34,21 +35,38 @@
+ int aacplusEncSetConfiguration(aacplusEncHandle hEncoder,
+         aacplusEncConfiguration *cfg);
+ 
++int aacplusEncSetConfigurationLC(aacplusEncHandle hEncoder,
++        aacplusEncConfiguration *cfg);
++
++int aacplusEncSetConfigurationSBR(aacplusEncHandle hEncoder,
++        aacplusEncConfiguration *cfg);        
+ 
+ aacplusEncHandle aacplusEncOpen(unsigned long sampleRate,
+ 				  unsigned int numChannels,
+ 				  unsigned long *inputSamples,
+ 				  unsigned long *maxOutputBytes);
+ 
++aacplusEncHandle aacplusEncOpenW(unsigned long sampleRate,
++          unsigned int numChannels,
++          unsigned long *inputSamples,
++          unsigned long *maxOutputBytes, unsigned int aacplus);
+ 
+ int aacplusEncGetDecoderSpecificInfo(aacplusEncHandle hEncoder, unsigned char **ppBuffer,
+ 					  unsigned long *pSizeOfDecoderSpecificInfo);
+ 
++int aacplusEncGetRequiredFrames(aacplusEncHandle hEncoder);
++
++int aacplusEncGetDelay(aacplusEncHandle hEncoder);
++int aacplusEncGetTotalDelay(aacplusEncHandle hEncoder);
+ 
+ int aacplusEncEncode(aacplusEncHandle hEncoder, int32_t *inputBuffer, unsigned int samplesInput,
+ 			 unsigned char *outputBuffer,
+ 			 unsigned int bufferSize);
+ 
++int aacplusEncEncodeW(aacplusEncHandle hEncoder, int32_t *inputBuffer, unsigned int samplesInput,
++                        unsigned char *outputBuffer,
++                        unsigned int bufferSize, unsigned int dopadding);                     
++
+ 
+ int aacplusEncClose(aacplusEncHandle hEncoder);
+ 
+Only in libaacplus/src: .libs
+diff -r -u libaacplus_original/src/aac_rom.c libaacplus/src/aac_rom.c
+--- libaacplus_original/src/aac_rom.c	2021-10-21 20:06:46.420043100 +0700
++++ libaacplus/src/aac_rom.c	2021-10-21 20:30:42.610187100 +0700
+@@ -945,93 +945,89 @@
+   misc constants (sfb width)
+ */
+ 
++/*
++    8000 Hz
++*/
++
++const unsigned char sfb_8000_long_1024[40] = {12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 16, 16, 16, 16, 16, 16, 16, 20, 20, 20, 20, 24, 24, 24, 28, 28, 32, 36, 36, 40, 44, 48, 52, 56, 60, 64, 80};
++const unsigned char sfb_8000_short_128[15] = {4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 12, 16, 20, 20};
+ 
+ /*
+     11025 Hz
+ */
+-const unsigned char sfb_11025_long_1024[] = {
+-       8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
+-       8, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+-      16, 16, 16, 16, 20, 20, 20, 24, 24, 28,
+-      28, 32, 36, 40, 40, 44, 48, 52, 56, 60,
+-      64, 64, 64
+-};
+-const unsigned char sfb_11025_short_128[] = {
+-      4,  4,  4,  4,  4,  4,  4,  4,  8,  8,
+-     12, 12, 16, 20, 20
+-};
+ 
++const unsigned char sfb_11025_long_1024[43] = {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12, 12, 12, 12, 12, 12, 16, 16, 16, 16, 20, 20, 20, 24, 24, 28, 28, 32, 36, 40, 40, 44, 48, 52, 56, 60, 64, 64, 64};
++const unsigned char sfb_11025_short_128[15] = {4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 12, 12, 16, 20, 20};
+ 
++/*
++    12000 Hz
++*/
+ 
++const unsigned char sfb_12000_long_1024[43] = {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12, 12, 12, 12, 12, 12, 16, 16, 16, 16, 20, 20, 20, 24, 24, 28, 28, 32, 36, 40, 40, 44, 48, 52, 56, 60, 64, 64, 64};
++const unsigned char sfb_12000_short_128[15] = {4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 12, 12, 16, 20, 20};
+ 
+ /*
+-    12000 Hz
++    16000 Hz
+ */
+-const unsigned char sfb_12000_long_1024[] = {
+-       8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
+-       8, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+-      16, 16, 16, 16, 20, 20, 20, 24, 24, 28,
+-      28, 32, 36, 40, 40, 44, 48, 52, 56, 60,
+-      64, 64, 64
+-};
+ 
+-const unsigned char sfb_12000_short_128[] = {
+-     4,  4,  4,  4,  4,  4,  4,  4,  8,  8,
+-     12, 12, 16, 20, 20
+-};
++const unsigned char sfb_16000_long_1024[43] = {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12, 12, 12, 12, 12, 12, 16, 16, 16, 16, 20, 20, 20, 24, 24, 28, 28, 32, 36, 40, 40, 44, 48, 52, 56, 60, 64, 64, 64};
++const unsigned char sfb_16000_short_128[15] = {4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 12, 12, 16, 20, 20};
+ 
++/*
++    22050 Hz
++*/
+ 
++const unsigned char sfb_22050_long_1024[47] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12, 16, 16, 16, 20, 20, 24, 24, 28, 28, 32, 36, 36, 40, 44, 48, 52, 52, 64, 64, 64, 64, 64};
++const unsigned char sfb_22050_short_128[15] = {4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 12, 12, 16, 16, 20};
+ 
+ /*
+-    16000 Hz
++    24000 Hz
+ */
+-const unsigned char sfb_16000_long_1024[] = {
+-    
+-       8,  8,  8,  8,  8,  8,  8,  8,  8,  8,
+-       8, 12, 12, 12, 12, 12, 12, 12, 12, 12,
+-      16, 16, 16, 16, 20, 20, 20, 24, 24, 28,
+-      28, 32, 36, 40, 40, 44, 48, 52, 56, 60,
+-      64, 64, 64
+-};
+ 
+-const unsigned char sfb_16000_short_128[] = {
+-     4,  4,  4,  4,  4,  4,  4,  4,  8,  8,
+-     12, 12, 16, 20, 20
+-};
++const unsigned char sfb_24000_long_1024[47] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12, 16, 16, 16, 20, 20, 24, 24, 28, 28, 32, 36, 36, 40, 44, 48, 52, 52, 64, 64, 64, 64, 64};
++const unsigned char sfb_24000_short_128[15] = {4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 12, 12, 16, 16, 20};
+ 
++/*
++    32000 Hz
++*/
+ 
++const unsigned char sfb_32000_long_1024[51] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12, 16, 16, 20, 20, 24, 24, 28, 28, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32};
++const unsigned char sfb_32000_short_128[14] = {4, 4, 4, 4, 4, 8, 8, 8, 12, 12, 12, 16, 16, 16};
+ 
+ /*
+-    22050 Hz
++    44100 Hz
+ */
+-const unsigned char sfb_22050_long_1024[] = {
+-      4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+-      4,  8,  8,  8,  8,  8,  8,  8,  8,  8,
+-      8, 12, 12, 12, 12, 16, 16, 16, 20, 20,
+-     24, 24, 28, 28, 32, 36, 36, 40, 44, 48,
+-     52, 52, 64, 64, 64, 64, 64
+-    
+-};
+-const unsigned char sfb_22050_short_128[] = {
+-     4,  4,  4,  4,  4,  4,  4,  8,  8,  8,
+-     12, 12, 16, 16, 20
+-};
+ 
++const unsigned char sfb_44100_long_1024[49] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12, 16, 16, 20, 20, 24, 24, 28, 28, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 96};
++const unsigned char sfb_44100_short_128[14] = {4, 4, 4, 4, 4, 8, 8, 8, 12, 12, 12, 16, 16, 16};
+ 
+ /*
+-    24000 Hz
++    48000 Hz
+ */
+-const unsigned char sfb_24000_long_1024[] = {
+-      4,  4,  4,  4,  4,  4,  4,  4,  4,  4,
+-      4,  8,  8,  8,  8,  8,  8,  8,  8,  8,
+-      8, 12, 12, 12, 12, 16, 16, 16, 20, 20,
+-     24, 24, 28, 28, 32, 36, 36, 40, 44, 48,
+-     52, 52, 64, 64, 64, 64, 64
+-};
+-const unsigned char sfb_24000_short_128[] = {
+-     4,  4,  4,  4,  4,  4,  4,  8,  8,  8,
+-     12, 12, 16, 16, 20
+-};
++
++const unsigned char sfb_48000_long_1024[49] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 8, 8, 8, 12, 12, 12, 12, 16, 16, 20, 20, 24, 24, 28, 28, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 96};
++const unsigned char sfb_48000_short_128[14] = {4, 4, 4, 4, 4, 8, 8, 8, 12, 12, 12, 16, 16, 16};
++
++/*
++    64000 Hz
++*/
++
++const unsigned char sfb_64000_long_1024[47] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 12, 12, 12, 16, 16, 16, 20, 24, 24, 28, 36, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40};
++const unsigned char sfb_64000_short_128[12] = {4, 4, 4, 4, 4, 4, 8, 8, 8, 16, 28, 36};
++
++/*
++    88200 Hz
++*/
++
++const unsigned char sfb_88200_long_1024[41] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 8, 12, 12, 12, 12, 12, 16, 16, 24, 28, 36, 44, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64};
++const unsigned char sfb_88200_short_128[12] = {4, 4, 4, 4, 4, 4, 8, 8, 8, 16, 28, 36};
++
++/*
++    96000 Hz
++*/
++
++const unsigned char sfb_96000_long_1024[41] = {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 8, 8, 8, 8, 8, 12, 12, 12, 12, 12, 16, 16, 24, 28, 36, 44, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64};
++const unsigned char sfb_96000_short_128[12] = {4, 4, 4, 4, 4, 4, 8, 8, 8, 16, 28, 36};
+ 
+ 
+ 
+@@ -1781,101 +1777,172 @@
+ };
+ 
+ 
+-const TNS_CONFIG_TABULATED  p_8000_mono_long ={
+-  1.2f,
+-  1800,
+-  16000,
+-  0.6f
+-};
+-const TNS_CONFIG_TABULATED  p_8000_mono_short ={
+-  1.2f,
+-  2500,
+-  16000,
+-  0.6f
+-};
+-const TNS_CONFIG_TABULATED  p_8000_stereo_long ={
+-  1.2f,
+-  1800,
+-  16000,
+-  0.6f
+-};
+-const TNS_CONFIG_TABULATED  p_8000_stereo_short ={
+-  1.2f,
+-  2500,
+-  16000,
+-  0.6f
+-};
+-const TNS_CONFIG_TABULATED  p_16000_mono_long ={
+-  1.2f,
+-  2000,
+-  16000,
+-  0.6f
+-};
+-const TNS_CONFIG_TABULATED  p_16000_mono_short ={
+-  1.2f,
+-  3750,
+-  16000,
+-  0.6f
+-};
+-const TNS_CONFIG_TABULATED  p_16000_stereo_long ={
+-  1.41f,
+-  2500,
+-  16000,
+-  0.6f
+-};
+-const TNS_CONFIG_TABULATED p_16000_stereo_short ={
+-  1.41f,
+-  3750,
+-  16000,
+-  0.6f
+-};
+-const TNS_CONFIG_TABULATED p_24000_mono_long ={
+-  1.41f,
+-  2500,
+-  16000,
+-  0.5f
+-};
+-const TNS_CONFIG_TABULATED p_24000_mono_short ={
+-  1.41f,
+-  3750,
+-  16000,
+-  0.5f
+-};
+-const TNS_CONFIG_TABULATED p_24000_stereo_long ={
+-  1.41f,
+-  2500,
+-  16000,
+-  0.5f
+-};
+-const TNS_CONFIG_TABULATED p_24000_stereo_short ={
+-  1.41f,
+-  3750,
+-  16000,
+-  0.5f
+-};
+-const TNS_CONFIG_TABULATED p_32000_mono_long ={
+-  1.41f,
+-  2500,
+-  16000,
+-  0.8f
+-};
+-const TNS_CONFIG_TABULATED p_32000_mono_short ={
+-  1.41f,
+-  3750,
+-  16000,
+-  0.3f
+-};
+-const TNS_CONFIG_TABULATED p_32000_stereo_long ={
+-  1.41f,
+-  2500,
+-  16000,
+-  0.5f
+-};
+-const TNS_CONFIG_TABULATED p_32000_stereo_short ={
+-  1.41f,
+-  3750,
+-  16000,
+-  0.3f
++const TNS_CONFIG_TABULATED p_8000_mono_long = {
++    1.2f,
++    1800,
++    16000,
++    0.6f
++};
++
++const TNS_CONFIG_TABULATED p_8000_mono_short = {
++    1.2f,
++    2500,
++    16000,
++    0.6f
++};
++
++const TNS_CONFIG_TABULATED p_8000_stereo_long = {
++    1.2f,
++    1800,
++    16000,
++    0.6f
++};
++
++const TNS_CONFIG_TABULATED p_8000_stereo_short = {
++    1.2f,
++    2500,
++    16000,
++    0.6f
++};
++
++const TNS_CONFIG_TABULATED p_16000_mono_long = {
++    1.41f,
++    2500,
++    16000,
++    0.6f
++};
++
++const TNS_CONFIG_TABULATED p_16000_mono_short = {
++    1.41f,
++    3750,
++    16000,
++    0.6f
++};
++
++const TNS_CONFIG_TABULATED p_16000_stereo_long = {
++    1.41f,
++    2500,
++    16000,
++    0.6f
++};
++
++const TNS_CONFIG_TABULATED p_16000_stereo_short = {
++    1.41f,
++    3750,
++    16000,
++    0.6f
++};
++
++const TNS_CONFIG_TABULATED p_24000_mono_long = {
++    1.41f,
++    2500,
++    16000,
++    0.5f
++};
++
++const TNS_CONFIG_TABULATED p_24000_mono_short = {
++    1.41f,
++    3750,
++    16000,
++    0.5f
++};
++
++const TNS_CONFIG_TABULATED p_24000_stereo_long = {
++    1.41f,
++    2500,
++    16000,
++    0.5f
++};
++
++const TNS_CONFIG_TABULATED p_24000_stereo_short = {
++    1.41f,
++    3750,
++    16000,
++    0.5f
++};
++
++const TNS_CONFIG_TABULATED p_32000_mono_long = {
++    1.41f,
++    2500,
++    16000,
++    0.8f
++};
++
++const TNS_CONFIG_TABULATED p_32000_mono_short = {
++    1.41f,
++    3750,
++    16000,
++    0.3f
++};
++
++const TNS_CONFIG_TABULATED p_32000_stereo_long = {
++    1.41f,
++    2500,
++    16000,
++    0.5f
++};
++
++const TNS_CONFIG_TABULATED p_32000_stereo_short = {
++    1.41f,
++    3750,
++    16000,
++    0.3f
++};
++
++const TNS_CONFIG_TABULATED p_48000_mono_long = {
++    1.41f,
++    2500,
++    16000,
++    0.5f
++};
++
++const TNS_CONFIG_TABULATED p_48000_mono_short = {
++    1.41f,
++    3750,
++    16000,
++    0.1f
++};
++
++const TNS_CONFIG_TABULATED p_48000_stereo_long = {
++    1.41f,
++    2500,
++    16000,
++    0.5f
++};
++
++const TNS_CONFIG_TABULATED p_48000_stereo_short = {
++    1.41f,
++    3750,
++    16000,
++    0.1f
++};
++
++const TNS_CONFIG_TABULATED p_96000_mono_long = {
++    1.41f,
++    2500,
++    16000,
++    0.3f
++};
++
++const TNS_CONFIG_TABULATED p_96000_mono_short = {
++    1.41f,
++    3750,
++    16000,
++    0.1f
++};
++
++const TNS_CONFIG_TABULATED p_96000_stereo_long = {
++    1.41f,
++    2500,
++    16000,
++    0.3f
++};
++
++const TNS_CONFIG_TABULATED p_96000_stereo_short = {
++    1.41f,
++    3750,
++    16000,
++    0.1f
+ };
+ 
+ const TNS_MAX_TAB_ENTRY
+@@ -1895,10 +1962,12 @@
+ };
+ 
+ /* this table describes which parameter set is used for which bitrate */
+-const TNS_INFO_TAB tnsInfoTab[4] = {
++const TNS_INFO_TAB tnsInfoTab[6] = {
+   {  4000, 12000, &p_8000_mono_long,  &p_8000_mono_short,  &p_8000_stereo_long,  &p_8000_stereo_short},
+   { 12001, 20000, &p_16000_mono_long, &p_16000_mono_short, &p_16000_stereo_long, &p_16000_stereo_short},
+   { 20001, 28000, &p_24000_mono_long, &p_24000_mono_short, &p_24000_stereo_long, &p_24000_stereo_short},
+-  { 28001, 44001, &p_32000_mono_long, &p_32000_mono_short, &p_32000_stereo_long, &p_32000_stereo_short},
++  { 28001, 36000, &p_32000_mono_long, &p_32000_mono_short, &p_32000_stereo_long, &p_32000_stereo_short},
++  { 36001, 52000, &p_48000_mono_long, &p_48000_mono_short, &p_48000_stereo_long, &p_48000_stereo_short},
++  { 52001, 384000, &p_96000_mono_long, &p_96000_mono_short, &p_96000_stereo_long, &p_96000_stereo_short}
+ };
+ 
+diff -r -u libaacplus_original/src/aac_rom.h libaacplus/src/aac_rom.h
+--- libaacplus_original/src/aac_rom.h	2021-10-21 20:06:46.425075100 +0700
++++ libaacplus/src/aac_rom.h	2021-10-21 20:30:05.441069000 +0700
+@@ -59,39 +59,61 @@
+   misc
+ */
+ 
+-extern const unsigned char sfb_11025_long_1024[];
+-extern const unsigned char sfb_11025_short_128[];
+-extern const unsigned char sfb_12000_long_1024[];
+-extern const unsigned char sfb_12000_short_128[];
+-extern const unsigned char sfb_16000_long_1024[];
+-extern const unsigned char sfb_16000_short_128[];
+-extern const unsigned char sfb_22050_long_1024[];
+-extern const unsigned char sfb_22050_short_128[];
+-extern const unsigned char sfb_24000_long_1024[];
+-extern const unsigned char sfb_24000_short_128[];
++extern const unsigned char sfb_8000_long_1024[40];
++extern const unsigned char sfb_8000_short_128[15];
++extern const unsigned char sfb_11025_long_1024[43];
++extern const unsigned char sfb_11025_short_128[15];
++extern const unsigned char sfb_12000_long_1024[43];
++extern const unsigned char sfb_12000_short_128[15];
++extern const unsigned char sfb_16000_long_1024[43];
++extern const unsigned char sfb_16000_short_128[15];
++extern const unsigned char sfb_22050_long_1024[47];
++extern const unsigned char sfb_22050_short_128[15];
++extern const unsigned char sfb_24000_long_1024[47];
++extern const unsigned char sfb_24000_short_128[15];
++extern const unsigned char sfb_32000_long_1024[51];
++extern const unsigned char sfb_32000_short_128[14];
++extern const unsigned char sfb_44100_long_1024[49];
++extern const unsigned char sfb_44100_short_128[14];
++extern const unsigned char sfb_48000_long_1024[49];
++extern const unsigned char sfb_48000_short_128[14];
++extern const unsigned char sfb_64000_long_1024[47];
++extern const unsigned char sfb_64000_short_128[12];
++extern const unsigned char sfb_88200_long_1024[41];
++extern const unsigned char sfb_88200_short_128[12];
++extern const unsigned char sfb_96000_long_1024[41];
++extern const unsigned char sfb_96000_short_128[12];
+ 
+ /*
+   TNS
+  */
+ 
+ extern const TNS_MAX_TAB_ENTRY tnsMaxBandsTab[9];
+-extern const TNS_CONFIG_TABULATED  p_8000_mono_long;
+-extern const TNS_CONFIG_TABULATED  p_8000_mono_short;
+-extern const TNS_CONFIG_TABULATED  p_8000_stereo_long;
+-extern const TNS_CONFIG_TABULATED  p_8000_stereo_short;
+-extern const TNS_CONFIG_TABULATED  p_16000_mono_long;
+-extern const TNS_CONFIG_TABULATED  p_16000_mono_short;
+-extern const TNS_CONFIG_TABULATED  p_16000_stereo_long;
+-extern const TNS_CONFIG_TABULATED  p_16000_stereo_short;
+-extern const TNS_CONFIG_TABULATED  p_24000_mono_long;
+-extern const TNS_CONFIG_TABULATED  p_24000_mono_short;
+-extern const TNS_CONFIG_TABULATED  p_24000_stereo_long;
+-extern const TNS_CONFIG_TABULATED  p_24000_stereo_short;
+-extern const TNS_CONFIG_TABULATED  p_32000_mono_long;
+-extern const TNS_CONFIG_TABULATED  p_32000_mono_short;
+-extern const TNS_CONFIG_TABULATED  p_32000_stereo_long;
+-extern const TNS_CONFIG_TABULATED  p_32000_stereo_short;
+-extern const TNS_INFO_TAB tnsInfoTab[4];
++extern const TNS_CONFIG_TABULATED p_8000_mono_long;
++extern const TNS_CONFIG_TABULATED p_8000_mono_short;
++extern const TNS_CONFIG_TABULATED p_8000_stereo_long;
++extern const TNS_CONFIG_TABULATED p_8000_stereo_short;
++extern const TNS_CONFIG_TABULATED p_16000_mono_long;
++extern const TNS_CONFIG_TABULATED p_16000_mono_short;
++extern const TNS_CONFIG_TABULATED p_16000_stereo_long;
++extern const TNS_CONFIG_TABULATED p_16000_stereo_short;
++extern const TNS_CONFIG_TABULATED p_24000_mono_long;
++extern const TNS_CONFIG_TABULATED p_24000_mono_short;
++extern const TNS_CONFIG_TABULATED p_24000_stereo_long;
++extern const TNS_CONFIG_TABULATED p_24000_stereo_short;
++extern const TNS_CONFIG_TABULATED p_32000_mono_long;
++extern const TNS_CONFIG_TABULATED p_32000_mono_short;
++extern const TNS_CONFIG_TABULATED p_32000_stereo_long;
++extern const TNS_CONFIG_TABULATED p_32000_stereo_short;
++extern const TNS_CONFIG_TABULATED p_48000_mono_long;
++extern const TNS_CONFIG_TABULATED p_48000_mono_short;
++extern const TNS_CONFIG_TABULATED p_48000_stereo_long;
++extern const TNS_CONFIG_TABULATED p_48000_stereo_short;
++extern const TNS_CONFIG_TABULATED p_96000_mono_long;
++extern const TNS_CONFIG_TABULATED p_96000_mono_short;
++extern const TNS_CONFIG_TABULATED p_96000_stereo_long;
++extern const TNS_CONFIG_TABULATED p_96000_stereo_short;
++extern const TNS_INFO_TAB tnsInfoTab[6];
+ 
+ extern const float tnsCoeff3[8];
+ extern const float tnsCoeff3Borders[8];
+Only in libaacplus/src: aac_rom.lo
+Only in libaacplus/src: aac_rom.o
+diff -r -u libaacplus_original/src/aacenc.c libaacplus/src/aacenc.c
+--- libaacplus_original/src/aacenc.c	2021-10-21 20:06:45.795117700 +0700
++++ libaacplus/src/aacenc.c	2021-10-24 21:33:31.079106400 +0700
+@@ -33,6 +33,7 @@
+   config->bitRate         = 48000;
+   config->bandWidth       = 0;
+   config->nSamplesPerFrame = AACENC_BLOCKSIZE;
++  config->heV2Override = -1;
+ 
+   
+ }
+@@ -82,6 +83,7 @@
+     case  8000: case 11025: case 12000:
+     case 16000: case 22050: case 24000:
+     case 32000: case 44100: case 48000:
++    case 64000: case 88200: case 96000:
+       break;
+ 
+     default:
+Only in libaacplus/src: aacenc.lo
+Only in libaacplus/src: aacenc.o
+diff -r -u libaacplus_original/src/aacplusenc.c libaacplus/src/aacplusenc.c
+--- libaacplus_original/src/aacplusenc.c	2021-10-21 20:06:45.396968700 +0700
++++ libaacplus/src/aacplusenc.c	2021-10-29 09:05:37.629460600 +0700
+@@ -61,6 +61,13 @@
+                   unsigned int numChannels,
+                   unsigned long *inputSamples,
+                   unsigned long *maxOutputBytes) {
++    return aacplusEncOpenW(sampleRate, numChannels, inputSamples, maxOutputBytes, 1);
++}
++
++aacplusEncHandle aacplusEncOpenW(unsigned long sampleRate,
++                  unsigned int numChannels,
++                  unsigned long *inputSamples,
++                  unsigned long *maxOutputBytes, unsigned int aac_plus) {
+ 
+     AACPContext *aacp = NULL;
+ 
+@@ -73,12 +80,20 @@
+     AacInitDefaultConfig(&aacp->config);
+     aacp->config.nChannelsIn = numChannels;
+     aacp->config.sampleRate = sampleRate;
+-    aacp->writeOffset = INPUT_DELAY*MAX_CHANNELS;
++    aacp->writeOffset = aac_plus ? INPUT_DELAY*MAX_CHANNELS : 0;
++    //aacp->writeOffset = 0;
++    //aacp->encoderDelay = aac_plus ? INPUT_DELAY : CORE_DELAY;
++    //aacp->encoderDelay = aac_plus ? 0 : CORE_DELAY;
++    aacp->encoderDelay = aac_plus ? CORE_DELAY*2 : CORE_DELAY;
++    aacp->encoderTotalDelay = aacp->encoderDelay * numChannels;
++    aacp->is_aacplus = aac_plus;    
++    aacp->blank_samples_needed = 2;
++
+     aacplusEncInitSBRAACRam(&aacp->aacEnc);
+ //#ifdef _FFTW3
+     init_plans(&aacp->fftctx);
+ //#endif
+-    *inputSamples = AACENC_BLOCKSIZE*2 * numChannels;
++    *inputSamples = aac_plus ? AACENC_BLOCKSIZE*2 * numChannels : AACENC_BLOCKSIZE * numChannels;
+     *maxOutputBytes = (6144/8)*MAX_CHANNELS+ADTS_HEADER_SIZE;
+     return (aacplusEncHandle ) aacp;
+ }
+@@ -95,9 +110,60 @@
+ 
+ 
+ 
++int aacplusEncSetConfiguration(aacplusEncHandle hEncoder,
++        aacplusEncConfiguration *cfg) {
++    AACPContext *aacp = (AACPContext *) hEncoder;            
++    if (aacp->is_aacplus) {
++        return aacplusEncSetConfigurationSBR(hEncoder, cfg);
++    }
++    return aacplusEncSetConfigurationLC(hEncoder, cfg);
++}
+ 
++int aacplusEncSetConfigurationLC(aacplusEncHandle hEncoder,
++        aacplusEncConfiguration *cfg) {
++    AACPContext *aacp = (AACPContext *) hEncoder;
+ 
+-int aacplusEncSetConfiguration(aacplusEncHandle hEncoder,
++    assert(cfg);
++    //if (&aacp->aacEnc.sbr_ram) free(&aacp->aacEnc.sbr_ram);
++               
++    if(cfg != &aacp->config)
++    	memcpy(&aacp->config, cfg, sizeof(aacplusEncConfiguration));
++
++    if(!aacp->config.nChannelsOut)
++    	aacp->config.nChannelsOut = aacp->config.nChannelsIn;
++
++    if(!aacp->config.bitRate)
++    	return 0;
++    
++    if(aacp->config.bandWidth > aacp->config.sampleRate/2)
++    	return 0;
++
++    if (!aacp->config.bandWidth) aacp->config.bandWidth = aacp->config.sampleRate/2;
++
++    aacp->config.inputSamples = aacp->config.nSamplesPerFrame * aacp->config.nChannelsIn;     
++
++    if (AacEncOpen( &aacp->aacEnc, &aacp->config) != 0){
++        AacEncClose(&aacp->aacEnc);
++        fprintf(stderr, "libaacplus: can't open aac encoder\n");
++        return 0;
++    }
++//#ifdef _FFTW3
++    aacp->aacEnc.fftctx = &aacp->fftctx;
++//#endif
++    /* create the ADTS header */
++    if(cfg->outputFormat==1) {
++        aacp->adts = calloc(1, sizeof(ADTSContext_t));
++        if(!aacp->adts) {
++            fprintf(stderr, "libaacplus: can't create adts context\n");
++            return 0;
++        }
++        adts_hdr_init(aacp->adts, &aacp->config, &aacp->aacEnc.bitStream);
++    }
++
++    return 1;            
++};
++
++int aacplusEncSetConfigurationSBR(aacplusEncHandle hEncoder,
+         aacplusEncConfiguration *cfg) {
+     AACPContext *aacp = (AACPContext *) hEncoder;
+ 
+@@ -119,7 +185,7 @@
+     /* set input samples for not only 1024 framesize */
+     aacp->config.inputSamples = aacp->config.nSamplesPerFrame * 2 * aacp->config.nChannelsIn;
+ 
+-    if ( (aacp->config.nChannelsOut == 2) && (aacp->config.bitRate >= 16000) && (aacp->config.bitRate < 44001) ) {
++    if ( (aacp->config.nChannelsOut == 2) && ((aacp->config.heV2Override == -1 && (aacp->config.bitRate >= 16000) && (aacp->config.bitRate < 44001)) || aacp->config.heV2Override == 1) ) {
+         aacp->config.nChannelsOut=1;
+         aacp->useParametricStereo=1;
+ 
+@@ -259,107 +325,252 @@
+     extradata[0] = AACPLUS_AOT_AAC_LC << 3 | srate_idx >> 1;
+     extradata[1] = srate_idx << 7 | ch_idx << 3 | window_size << 2;
+ 
+-    srate_idx = FindSRIndex(aacp->config.sampleRate * 2);
++    if (aacp->is_aacplus) {
++        srate_idx = FindSRIndex(aacp->config.sampleRate * 2);
++
++        extradata[2] = loas_sync >> 3; //sync extension
++        extradata[3] = (loas_sync << 5) & 0xe0 | AACPLUS_AOT_SBR; //sync extension + sbr hdr
++        extradata[4] = 1 << 7 | srate_idx << 3 | ps_extension >> 8;
++    }
+ 
+-    extradata[2] = loas_sync >> 3; //sync extension
+-    extradata[3] = (loas_sync << 5) & 0xe0 | AACPLUS_AOT_SBR; //sync extension + sbr hdr
+-    extradata[4] = 1 << 7 | srate_idx << 3 | ps_extension >> 8;
+-    if(ps_extension) {
+-        extradata[5] = ps_extension & 0xff;
+-		extradata[6] = 1 << 7;
+-		*pSizeOfDecoderSpecificInfo = 7;
++    if (aacp->is_aacplus) {
++        if(ps_extension) {
++            extradata[5] = ps_extension & 0xff;
++            extradata[6] = 1 << 7;
++            *pSizeOfDecoderSpecificInfo = 7;
++        } else {
++            *pSizeOfDecoderSpecificInfo = 5;
++        }
+     } else {
+-		*pSizeOfDecoderSpecificInfo = 5;
++        *pSizeOfDecoderSpecificInfo = 2;
+     }
+ 
+-//    fprintf(stderr, "libaacplus: codec config(%d): %02x %02x %02x %02x %02x %02x %02x\n", *pSizeOfDecoderSpecificInfo,
++//    fprintf(stderr, "libaacplus: codec config(%d): %d %d %d %d %d %d %d\n", *pSizeOfDecoderSpecificInfo,
+ //    extradata[0], extradata[1], extradata[2], extradata[3], extradata[4], extradata[5], extradata[6]);
+     *ppBuffer = extradata;
+     return 1;
+ }
+ 
++int aacplusEncGetRequiredFrames(aacplusEncHandle hEncoder) {
++    AACPContext *aacp = (AACPContext *) hEncoder;
++    int required_frames = aacp->writtenSamples;
++    return required_frames > 0 ? aacp->config.inputSamples - required_frames : 0;
++}
++
++int aacplusEncGetDelay(aacplusEncHandle hEncoder) {
++    AACPContext *aacp = (AACPContext *) hEncoder;
++    return aacp->encoderDelay;
++}
++
++int aacplusEncGetTotalDelay(aacplusEncHandle hEncoder) {
++    AACPContext *aacp = (AACPContext *) hEncoder;
++    return aacp->encoderTotalDelay;
++}
+ 
+ int aacplusEncEncode(aacplusEncHandle hEncoder, int32_t *inputBuffer, unsigned int samplesInput,
+              unsigned char *outputBuffer,
+              unsigned int bufferSize) {
++    return aacplusEncEncodeW(hEncoder, inputBuffer, samplesInput, outputBuffer, bufferSize, 0);
++}
++
++int aacplusEncEncodeW(aacplusEncHandle hEncoder, int32_t *inputBuffer, unsigned int samplesInput,
++             unsigned char *outputBuffer,
++             unsigned int bufferSize, unsigned int dopadding) {
+     AACPContext *aacp = (AACPContext *) hEncoder;
+     unsigned int i;
+     int ch, outSamples=0, numOutBytes = 0;
+     int adts_offset = 0;
++    int flush = (!inputBuffer);
++    int write_blank_samples = (flush && !aacp->writtenSamples);
++    int needed_padding = 0;
+ 
+     assert(outputBuffer);
+ 
++    if (!write_blank_samples && aacp->shutting_down)
++        return -1;
++
++    if (write_blank_samples && !aacp->blank_samples_needed) 
++        return 0;
++    
++    if (write_blank_samples && !aacp->shutting_down)
++        aacp->shutting_down = 1;
++
+     if(samplesInput > aacp->config.inputSamples)
+         return -1;
+ 
+-    switch (aacp->config.inputFormat){
+-        case AACPLUS_INPUT_16BIT: {
+-            int16_t *inbuff = (int16_t *) inputBuffer;
+-            for (i=0; i<samplesInput; i++)
+-                aacp->inBuf[(2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples] = (float) inbuff[i];
+-            break;
++    if (aacp->is_aacplus) {
++
++        if (!flush) {
++            switch (aacp->config.inputFormat){
++                case AACPLUS_INPUT_16BIT: {
++                    int16_t *inbuff = (int16_t *) inputBuffer;
++                    for (i=0; i<samplesInput; i++)
++                        aacp->inBuf[(2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples] = (float) inbuff[i];
++                    break;
++                }
++                case AACPLUS_INPUT_FLOAT: {
++                    float *inbuff = (float *) inputBuffer;
++                    for (i=0; i<samplesInput; i++)
++                        aacp->inBuf[(2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples] = inbuff[i] * SHRT_MAX;
++                    break;
++                }
++            default:
++                    return -1;
++                    break;
++            }
++        } else if (!write_blank_samples) {
++            for (i=0; i<(aacp->config.inputSamples-aacp->writtenSamples); i++) {
++                //printf("AACS Flush: %d - %d\n", i, (2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples);
++                aacp->inBuf[(2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples] = (float) 0;
++            }
++            samplesInput = aacp->config.inputSamples-aacp->writtenSamples;
++        } else {
++            for (i=0; i<aacp->config.inputSamples; i++) {
++                //printf("AACS Pad: %d - %d\n", i, (2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples);
++                aacp->inBuf[(2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples] = (float) 0;
++            }
++            aacp->blank_samples_needed--;
++            samplesInput = aacp->config.inputSamples;
++        }
++
++
++        /* Simple stereo to mono conversion: L = (L+R)/2 */
++        if((aacp->config.nChannelsIn == 2) &&
++        (aacp->config.nChannelsOut == 1) && !aacp->useParametricStereo) {
++            for (i=0; i<samplesInput/2; i++)
++                aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples] = (aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples]
++                    + aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples+1])*0.5f;
+         }
+-        case AACPLUS_INPUT_FLOAT: {
+-            float *inbuff = (float *) inputBuffer;
+-            for (i=0; i<samplesInput; i++)
+-                aacp->inBuf[(2/aacp->config.nChannelsIn)*i+aacp->writeOffset+aacp->writtenSamples] = inbuff[i] * SHRT_MAX;
+-            break;
++
++        aacp->writtenSamples+=samplesInput;
++
++        if (aacp->writtenSamples < aacp->config.inputSamples) {
++            if (dopadding) {
++                for (int pad = aacp->writtenSamples; pad < aacp->config.inputSamples; pad++) {
++                    aacp->inBuf[pad+aacp->writeOffset] = (float) 0;
++                }                
++                needed_padding = aacp->config.inputSamples-aacp->writtenSamples;
++                aacp->writtenSamples += needed_padding;
++                //printf("%d - %d : padded\n", aacp->writtenSamples, needed_padding);
++            } else {
++                return 0; // need more data
++            }
+         }
+-	default:
++
++        if(aacp->adts) adts_offset=ADTS_HEADER_SIZE;
++        if (bufferSize < (6144/8)*MAX_CHANNELS+adts_offset)
+             return -1;
+-            break;
+-    }
+ 
+-    /* Simple stereo to mono conversion: L = (L+R)/2 */
+-    if((aacp->config.nChannelsIn == 2) &&
+-       (aacp->config.nChannelsOut == 1) && !aacp->useParametricStereo) {
+-        for (i=0; i<samplesInput/2; i++)
+-            aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples] = (aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples]
+-                 + aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples+1])*0.5f;
+-    }
++        /* encode one SBR frame */
++        EnvEncodeFrame( &aacp->hEnvEnc,
++                &aacp->inBuf[aacp->envReadOffset],
++                &aacp->inBuf[aacp->coreWriteOffset],
++                MAX_CHANNELS,
++                &aacp->numAncDataBytes,
++                aacp->ancDataBytes);
++
++        /* 2:1 downsampling for AAC core */
++        if (!aacp->useParametricStereo)
++            for( ch=0; ch<aacp->config.nChannelsIn; ch++ )
++                IIR21_Downsample( &aacp->IIR21_reSampler[ch],
++                        &aacp->inBuf[aacp->writeOffset+ch],
++                        aacp->config.nSamplesPerFrame * 2, //aacp->writtenSamples,
++                        MAX_CHANNELS,
++                        &aacp->inBuf[ch],
++                        &outSamples,
++                        MAX_CHANNELS);
++
++        AacEncEncode( &aacp->aacEnc,
++                    aacp->inBuf,
++                    aacp->useParametricStereo ? 1 : MAX_CHANNELS, /* stride (step) */
++                    aacp->ancDataBytes,
++                    &aacp->numAncDataBytes,
++                    (unsigned *) (outputBuffer+adts_offset),
++                    &numOutBytes);
++        if (aacp->useParametricStereo) {
++            memcpy( aacp->inBuf,&aacp->inBuf[aacp->config.nSamplesPerFrame],CORE_INPUT_OFFSET_PS*sizeof(float));
++        } else {
++            memmove( aacp->inBuf,&aacp->inBuf[aacp->config.nSamplesPerFrame*2*MAX_CHANNELS],
++                    aacp->writeOffset*sizeof(float));
++        }
+ 
+-    aacp->writtenSamples+=samplesInput;
++    } else {
+ 
+-    if (aacp->writtenSamples < aacp->config.inputSamples)
+-        return 0;
++        if (!flush) {                               
++            switch (aacp->config.inputFormat){
++                case AACPLUS_INPUT_16BIT: {
++                    int16_t *inbuff = (int16_t *) inputBuffer;
++                    for (i=0; i<samplesInput; i++) 
++                        aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples] = (float) inbuff[i];                    
++                    break;
++                }
++                case AACPLUS_INPUT_FLOAT: {
++                    float *inbuff = (float *) inputBuffer;
++                    for (i=0; i<samplesInput; i++)
++                        aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples] = inbuff[i] * SHRT_MAX;
++                    break;
++                }
++            default:
++                    return -1;
++                    break;
++            }
++        } else if (!write_blank_samples) {
++            for (i=0; i<(aacp->config.inputSamples-aacp->writtenSamples); i++) {
++                //printf("AACS Flush: %d - %d\n", i, i+aacp->writeOffset+aacp->writtenSamples);
++                aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples] = (float) 0;
++            }
++            samplesInput = aacp->config.inputSamples-aacp->writtenSamples;
++        } else {
++            for (i=0; i<aacp->config.inputSamples; i++) {
++                //printf("AACS Pad: %d - %d\n", i, i+aacp->writeOffset+aacp->writtenSamples);
++                aacp->inBuf[i+aacp->writeOffset+aacp->writtenSamples] = (float) 0;
++            }
++            aacp->blank_samples_needed--;
++            samplesInput = aacp->config.inputSamples;
++        }
++        
++        int downmix = 0;
+ 
+-    if(aacp->adts) adts_offset=ADTS_HEADER_SIZE;
+-    if (bufferSize < (6144/8)*MAX_CHANNELS+adts_offset)
+-        return -1;
++        /* Simple stereo to mono conversion: L = (L+R)/2 */        
++        if((aacp->config.nChannelsIn == 2) &&
++        (aacp->config.nChannelsOut == 1)) {
++            downmix = 1;
++            for (i=0; i<samplesInput/2; i++) {
++                float mono = (aacp->inBuf[(2*i)+aacp->writeOffset+aacp->writtenSamples] + aacp->inBuf[(2*i)+aacp->writeOffset+aacp->writtenSamples+1])*0.5f;
++                aacp->monoBuf[i+aacp->writeOffset+aacp->writtenSamples] = mono;
++            }
++        }        
++
++        aacp->writtenSamples+=samplesInput;     
++
++        if (aacp->writtenSamples < aacp->config.inputSamples) {
++            if (dopadding) {
++                for (int pad = aacp->writtenSamples; pad < aacp->config.inputSamples; pad++) {
++                    aacp->inBuf[pad+aacp->writeOffset] = (float) 0;
++                }                
++                needed_padding = aacp->config.inputSamples-aacp->writtenSamples;
++                aacp->writtenSamples += needed_padding;
++                //printf("%d - %d : padded\n", aacp->writtenSamples, needed_padding);
++            } else {
++                //printf("Needed %d data remaining\n", aacplusEncGetRequiredFrames(hEncoder));
++                return 0; // need more data
++            }
++        }
+ 
+-    /* encode one SBR frame */
+-    EnvEncodeFrame( &aacp->hEnvEnc,
+-            &aacp->inBuf[aacp->envReadOffset],
+-            &aacp->inBuf[aacp->coreWriteOffset],
+-            MAX_CHANNELS,
++        if(aacp->adts) adts_offset=ADTS_HEADER_SIZE;
++        if (bufferSize < (6144/8)*MAX_CHANNELS+adts_offset)
++            return -1;
++        
++        AacEncEncode( &aacp->aacEnc,
++            downmix ? aacp->monoBuf : aacp->inBuf,
++            aacp->config.nChannelsOut, /* stride (step) */
++            aacp->ancDataBytes,
+             &aacp->numAncDataBytes,
+-            aacp->ancDataBytes);
++            (unsigned *) (outputBuffer+adts_offset),
++            &numOutBytes);    
+ 
+-    /* 2:1 downsampling for AAC core */
+-    if (!aacp->useParametricStereo)
+-        for( ch=0; ch<aacp->config.nChannelsIn; ch++ )
+-            IIR21_Downsample( &aacp->IIR21_reSampler[ch],
+-                    &aacp->inBuf[aacp->writeOffset+ch],
+-                    aacp->config.nSamplesPerFrame * 2, //aacp->writtenSamples,
+-                    MAX_CHANNELS,
+-                    &aacp->inBuf[ch],
+-                    &outSamples,
+-                    MAX_CHANNELS);
+-
+-    AacEncEncode( &aacp->aacEnc,
+-                  aacp->inBuf,
+-                  aacp->useParametricStereo ? 1 : MAX_CHANNELS, /* stride (step) */
+-                  aacp->ancDataBytes,
+-                  &aacp->numAncDataBytes,
+-                  (unsigned *) (outputBuffer+adts_offset),
+-                  &numOutBytes);
+-    if (aacp->useParametricStereo) {
+-        memcpy( aacp->inBuf,&aacp->inBuf[aacp->config.nSamplesPerFrame],CORE_INPUT_OFFSET_PS*sizeof(float));
+-    } else {
+-        memmove( aacp->inBuf,&aacp->inBuf[aacp->config.nSamplesPerFrame*2*MAX_CHANNELS],
+-        		aacp->writeOffset*sizeof(float));
+     }
+-
++    
+     /* Write one frame of encoded audio */
+     if(numOutBytes > 0 && aacp->adts) {
+         adts_hdr_up(aacp->adts, outputBuffer, numOutBytes);
+diff -r -u libaacplus_original/src/aacplusenc.h libaacplus/src/aacplusenc.h
+--- libaacplus_original/src/aacplusenc.h	2021-10-21 20:06:45.375111200 +0700
++++ libaacplus/src/aacplusenc.h	2021-10-29 08:22:08.295450800 +0700
+@@ -145,12 +145,17 @@
+         FFTWFContext_t fftctx;
+ //#endif
+         float inBuf[(AACENC_BLOCKSIZE*2 + MAX_DS_FILTER_DELAY + INPUT_DELAY)*MAX_CHANNELS];
++        float monoBuf[(AACENC_BLOCKSIZE*2 + MAX_DS_FILTER_DELAY + INPUT_DELAY)];
++        
++        //float inBufLC[AACENC_BLOCKSIZE*MAX_CHANNELS];
++
+         //char outBuf[(6144/8)*MAX_CHANNELS+ADTS_HEADER_SIZE];
+ 
+ 
+         unsigned int numAncDataBytes;
+-        unsigned char ancDataBytes[MAX_PAYLOAD_SIZE];
++        unsigned char ancDataBytes[MAX_PAYLOAD_SIZE];        
+ 
++        int blank_samples_needed;
+ 
+         int useParametricStereo;
+         unsigned int inSamples;
+@@ -158,6 +163,10 @@
+         unsigned int writeOffset;
+         int envReadOffset;
+         int coreWriteOffset;
++        int is_aacplus;
++        int encoderDelay;
++        int encoderTotalDelay;
++        int shutting_down;
+ 
+ } AACPContext;
+ 
+Only in libaacplus/src: aacplusenc.lo
+Only in libaacplus/src: aacplusenc.o
+Only in libaacplus/src: adj_thr.lo
+Only in libaacplus/src: adj_thr.o
+diff -r -u libaacplus_original/src/adts.h libaacplus/src/adts.h
+--- libaacplus_original/src/adts.h	2021-10-21 20:06:45.381625000 +0700
++++ libaacplus/src/adts.h	2021-10-22 09:39:40.158365100 +0700
+@@ -13,7 +13,7 @@
+ #include "aacplusenc.h"
+ 
+ #define ADTS_HEADER_SIZE 7
+-#define ADTS_MPEG_ID 1 /* 0: MPEG-4, 1: MPEG-2 */
++#define ADTS_MPEG_ID 0 /* 0: MPEG-4, 1: MPEG-2 */
+ #define ADTS_MPEG_PROFILE 1
+ 
+ typedef struct {
+Only in libaacplus/src: adts.lo
+Only in libaacplus/src: adts.o
+Only in libaacplus/src: band_nrg.lo
+Only in libaacplus/src: band_nrg.o
+Only in libaacplus/src: bit_cnt.lo
+Only in libaacplus/src: bit_cnt.o
+Only in libaacplus/src: bit_sbr.lo
+Only in libaacplus/src: bit_sbr.o
+Only in libaacplus/src: bitbuffer.lo
+Only in libaacplus/src: bitbuffer.o
+Only in libaacplus/src: bitenc.lo
+Only in libaacplus/src: bitenc.o
+Only in libaacplus/src: block_switch.lo
+Only in libaacplus/src: block_switch.o
+Only in libaacplus/src: cfftn.lo
+Only in libaacplus/src: cfftn.o
+Only in libaacplus/src: channel_map.lo
+Only in libaacplus/src: channel_map.o
+Only in libaacplus/src: code_env.lo
+Only in libaacplus/src: code_env.o
+Only in libaacplus/src: dyn_bits.lo
+Only in libaacplus/src: dyn_bits.o
+Only in libaacplus/src: env_bit.lo
+Only in libaacplus/src: env_bit.o
+Only in libaacplus/src: env_est.lo
+Only in libaacplus/src: env_est.o
+Only in libaacplus/src: fram_gen.lo
+Only in libaacplus/src: fram_gen.o
+Only in libaacplus/src: freq_sca.lo
+Only in libaacplus/src: freq_sca.o
+Only in libaacplus/src: grp_data.lo
+Only in libaacplus/src: grp_data.o
+Only in libaacplus/src: hybrid.lo
+Only in libaacplus/src: hybrid.o
+Only in libaacplus/src: interface.lo
+Only in libaacplus/src: interface.o
+Only in libaacplus/src: invf_est.lo
+Only in libaacplus/src: invf_est.o
+Only in libaacplus/src: libaacplus.la
+diff -r -u libaacplus_original/src/libaacplus.sym libaacplus/src/libaacplus.sym
+--- libaacplus_original/src/libaacplus.sym	2021-10-21 20:06:45.390458700 +0700
++++ libaacplus/src/libaacplus.sym	2021-10-23 21:19:17.997464300 +0700
+@@ -1,6 +1,11 @@
+ aacplusEncGetCurrentConfiguration
+ aacplusEncSetConfiguration
+ aacplusEncOpen
++aacplusEncOpenW
+ aacplusEncGetDecoderSpecificInfo
++aacplusEncGetRequiredFrames
++aacplusEncGetDelay
++aacplusEncGetTotalDelay
+ aacplusEncEncode
++aacplusEncEncodeW
+ aacplusEncClose
+Only in libaacplus/src: line_pe.lo
+Only in libaacplus/src: line_pe.o
+Only in libaacplus/src: mh_det.lo
+Only in libaacplus/src: mh_det.o
+Only in libaacplus/src: ms_stereo.lo
+Only in libaacplus/src: ms_stereo.o
+Only in libaacplus/src: nf_est.lo
+Only in libaacplus/src: nf_est.o
+Only in libaacplus/src: pre_echo_control.lo
+Only in libaacplus/src: pre_echo_control.o
+Only in libaacplus/src: ps_bitenc.lo
+Only in libaacplus/src: ps_bitenc.o
+Only in libaacplus/src: ps_enc.lo
+Only in libaacplus/src: ps_enc.o
+diff -r -u libaacplus_original/src/psy_configuration.c libaacplus/src/psy_configuration.c
+--- libaacplus_original/src/psy_configuration.c	2021-10-21 20:06:46.896283700 +0700
++++ libaacplus/src/psy_configuration.c	2021-10-21 20:25:46.666676200 +0700
+@@ -23,12 +23,19 @@
+ 0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f,  0.0f, 3.0f,  5.0f, 10.0f, 20.0f, 30.0f};
+ 
+ 
+-static const SFB_INFO_TAB sfbInfoTab[] ={
++static const SFB_INFO_TAB sfbInfoTab[] = {
++  {8000, sfb_8000_long_1024, sfb_8000_short_128},
+   {11025, sfb_11025_long_1024, sfb_11025_short_128},
+   {12000, sfb_12000_long_1024, sfb_12000_short_128},
+   {16000, sfb_16000_long_1024, sfb_16000_short_128},
+   {22050, sfb_22050_long_1024, sfb_22050_short_128},
+-  {24000, sfb_24000_long_1024, sfb_24000_short_128}
++  {24000, sfb_24000_long_1024, sfb_24000_short_128},
++  {32000, sfb_32000_long_1024, sfb_32000_short_128},
++  {44100, sfb_44100_long_1024, sfb_44100_short_128},
++  {48000, sfb_48000_long_1024, sfb_48000_short_128},
++  {64000, sfb_64000_long_1024, sfb_64000_short_128},
++  {88200, sfb_88200_long_1024, sfb_88200_short_128},
++  {96000, sfb_96000_long_1024, sfb_96000_short_128},
+ };
+ 
+ 
+Only in libaacplus/src: psy_configuration.lo
+Only in libaacplus/src: psy_configuration.o
+Only in libaacplus/src: psy_main.lo
+Only in libaacplus/src: psy_main.o
+Only in libaacplus/src: qc_main.lo
+Only in libaacplus/src: qc_main.o
+Only in libaacplus/src: qmf_enc.lo
+Only in libaacplus/src: qmf_enc.o
+Only in libaacplus/src: quantize.lo
+Only in libaacplus/src: quantize.o
+Only in libaacplus/src: resampler.lo
+Only in libaacplus/src: resampler.o
+Only in libaacplus/src: sbr_main.lo
+Only in libaacplus/src: sbr_main.o
+Only in libaacplus/src: sbr_misc.lo
+Only in libaacplus/src: sbr_misc.o
+Only in libaacplus/src: sbr_rom.lo
+Only in libaacplus/src: sbr_rom.o
+Only in libaacplus/src: sf_estim.lo
+Only in libaacplus/src: sf_estim.o
+Only in libaacplus/src: spreading.lo
+Only in libaacplus/src: spreading.o
+Only in libaacplus/src: stat_bits.lo
+Only in libaacplus/src: stat_bits.o
+Only in libaacplus/src: stprepro.lo
+Only in libaacplus/src: stprepro.o
+Only in libaacplus/src: tns.lo
+Only in libaacplus/src: tns.o
+Only in libaacplus/src: tns_param.lo
+Only in libaacplus/src: tns_param.o
+Only in libaacplus/src: ton_corr.lo
+Only in libaacplus/src: ton_corr.o
+Only in libaacplus/src: tran_det.lo
+Only in libaacplus/src: tran_det.o
+Only in libaacplus/src: transcendent.lo
+Only in libaacplus/src: transcendent.o
+Only in libaacplus/src: transform.lo
+Only in libaacplus/src: transform.o
+Only in libaacplus/: tc.aac
+Only in libaacplus/: tc_error.aac
+Only in libaacplus/: tc_m2.aac
+Only in libaacplus/: tcm.aac
+Only in libaacplus/: vtr
+Only in libaacplus/: wbuf
+Only in libaacplus/: wl

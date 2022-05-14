@@ -1,0 +1,19 @@
+--- aacplus.pc.in	2021-10-21 20:06:47.066323300 +0700
++++ aacplus.pc.in	2021-10-23 11:34:05.310527200 +0700
+@@ -3,13 +3,12 @@
+ libdir=@libdir@
+ includedir=@includedir@/aacplus
+ toolsdir=${exec_prefix}/bin
+-cppflags=@AACPLUS_CPPFLAGS@
+-cflags_only=@AACPLUS_CFLAGS@
++#cppflags=@AACPLUS_CPPFLAGS@
++#cflags_only=@AACPLUS_CFLAGS@
+ 
+ 
+ Name: aacplus
+ Description: AAC+ encoder library
+-Requires: @AACPLUS_REQUIRES@
+ Version: @VERSION@
+-Libs: @AACPLUS_LIBS@
++Libs: -L${libdir} @AACPLUS_LIBS@
+ Cflags: -I${includedir} @AACPLUS_CFLAGS@
