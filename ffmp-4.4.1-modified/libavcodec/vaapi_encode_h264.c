@@ -1103,7 +1103,7 @@ static av_cold int vaapi_encode_h264_configure(AVCodecContext *avctx)
                 return AVERROR(ENOMEM);
 
             snprintf(priv->sei_identifier_string, len + 1,
-                     "%s / VAAPI %s / %s", lavc, vaapi, driver);
+                     "Copyright (c) 2022 Wrapper / VAAPI %s / %s", lavc, vaapi, driver);
 
             priv->sei_identifier.data        = priv->sei_identifier_string;
             priv->sei_identifier.data_length = len + 1;
