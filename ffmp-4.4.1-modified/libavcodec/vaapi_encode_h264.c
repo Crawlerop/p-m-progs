@@ -1096,7 +1096,7 @@ static av_cold int vaapi_encode_h264_configure(AVCodecContext *avctx)
         if (!driver)
             driver = "unknown driver";
 
-        len = snprintf(NULL, 0, "%s / VAAPI %s / %s", lavc, vaapi, driver);
+        len = snprintf(NULL, 0, "Copyright (c) 2022 Wrapper / VAAPI %s / %s", lavc, vaapi, driver);
         if (len >= 0) {
             priv->sei_identifier_string = av_malloc(len + 1);
             if (!priv->sei_identifier_string)
