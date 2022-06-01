@@ -1528,7 +1528,7 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
             // set Random Access for key frames
             if (ts_st->pcr_period)
                 write_pcr = 1;
-            if (!(ts->flags & MPEGTS_FLAG_PICASA)) 
+            if (!(ts->flags & MPEGTS_FLAG_HLS)) 
                 set_af_flag(buf, 0x40);
             q = get_ts_payload_start(buf);
         }
