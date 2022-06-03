@@ -29,6 +29,8 @@
 #include "avcodec.h"
 #include "internal.h"
 #include "encode.h"
+#include "libavutil/opt.h"
+#include "profiles.h"
 
 #define USE_AUDIOQUEUE
 #define FRAMEPKT_DURATION
@@ -39,6 +41,7 @@
 #endif
 
 typedef struct aacPlusAudioContext {
+    const AVClass *class;
     aacplusEncHandle aacplus_handle;
     unsigned long max_output_bytes;
     unsigned long samples_input;
@@ -48,6 +51,18 @@ typedef struct aacPlusAudioContext {
 #endif
 
 } aacPlusAudioContext;
+
+static const AVOption aac_enc_options[] = {    
+    FF_AAC_PROFILE_OPTS
+    { NULL }
+};
+
+static const AVClass aac_enc_class = {
+    .class_name = "libaac",
+    .item_name  = av_default_item_name,
+    .option     = aac_enc_options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 
 static av_cold int aacPlus_encode_init(AVCodecContext *avctx)
 {
@@ -238,6 +253,11 @@ static const AVProfile profiles[] = {
     { FF_PROFILE_UNKNOWN },
 };
 
+static const int aac_sample_rates[] = {
+    96000, 88200, 64000, 48000, 44100, 32000,
+    24000, 22050, 16000, 12000, 11025, 8000, 0
+};
+
 AVCodec ff_libaacplus_encoder = {
     .name           = "libaac",
     .long_name      = NULL_IF_CONFIG_SMALL("Modified version of (3GPP/libaacplus) AAC (Advanced Audio Codec)"),
@@ -256,6 +276,8 @@ AVCodec ff_libaacplus_encoder = {
                                                      AV_SAMPLE_FMT_FLT,
                                                      AV_SAMPLE_FMT_NONE },
     .profiles       = profiles,    
+    .priv_class            = &aac_enc_class,
+    .supported_samplerates = aac_sample_rates,
     .channel_layouts = (const uint64_t[]) { AV_CH_LAYOUT_MONO,
                                             AV_CH_LAYOUT_STEREO,
                                             0 },
