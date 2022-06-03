@@ -5079,7 +5079,7 @@ static int mov_write_ftyp_tag(AVIOContext *pb, AVFormatContext *s)
         if (!(mov->flags & FF_MOV_FLAG_DEFAULT_BASE_MOOF)) {
             // write isom for mp4 only if it it's not the major brand already.
             if (mov->mode != MODE_MP4 || mov->flags & FF_MOV_FLAG_NEGATIVE_CTS_OFFSETS)
-                ffio_wfourcc(pb, "isom");
+                ffio_wfourcc(pb, "mp42");
             /*
             ffio_wfourcc(pb, "iso2");
             if (has_h264)
