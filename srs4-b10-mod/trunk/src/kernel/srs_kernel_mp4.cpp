@@ -5468,7 +5468,7 @@ srs_error_t SrsMp4Decoder::parse_ftyp(SrsMp4FileTypeBox* ftyp)
     bool legal_brand = false;
     static SrsMp4BoxBrand legal_brands[] = {
         SrsMp4BoxBrandISOM, SrsMp4BoxBrandISO2, SrsMp4BoxBrandAVC1, SrsMp4BoxBrandMP41,
-        SrsMp4BoxBrandISO5
+        SrsMp4BoxBrandISO5, SrsMp4BoxBrandMP42
     };
     for (int i = 0; i < (int)(sizeof(legal_brands)/sizeof(SrsMp4BoxBrand)); i++) {
         if (ftyp->major_brand == legal_brands[i]) {
@@ -5665,9 +5665,15 @@ srs_error_t SrsMp4Encoder::initialize(ISrsWriteSeeker* ws)
         SrsMp4FileTypeBox* ftyp = new SrsMp4FileTypeBox();
         SrsAutoFree(SrsMp4FileTypeBox, ftyp);
         
+        /*
         ftyp->major_brand = SrsMp4BoxBrandISOM;
         ftyp->minor_version = 512;
         ftyp->set_compatible_brands(SrsMp4BoxBrandISOM, SrsMp4BoxBrandISO2, SrsMp4BoxBrandAVC1, SrsMp4BoxBrandMP41);
+        */
+
+        ftyp->major_brand = SrsMp4BoxBrandMP42;
+        ftyp->minor_version = 0;
+        ftyp->set_compatible_brands(SrsMp4BoxBrandMP42, SrsMp4BoxBrandMP41);
         
         int nb_data = ftyp->nb_bytes();
         std::vector<char> data(nb_data);
@@ -6113,7 +6119,7 @@ srs_error_t SrsMp4M2tsInitEncoder::write(SrsFormat* format, bool video, int tid)
         SrsAutoFree(SrsMp4FileTypeBox, ftyp);
 
         ftyp->major_brand = SrsMp4BoxBrandISO5;
-        ftyp->minor_version = 512;
+        ftyp->minor_version = 0;
         ftyp->set_compatible_brands(SrsMp4BoxBrandISO6, SrsMp4BoxBrandMP41);
 
         if ((err = srs_mp4_write_box(writer, ftyp)) != srs_success) {
