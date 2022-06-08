@@ -255,6 +255,7 @@ typedef struct HLSContext {
     AVIOContext *sub_m3u8_out;
     int64_t timeout;
     int ignore_io_errors;
+    int max_delay_zero;
     char *headers;
     int has_default_key; /* has DEFAULT field of var_stream_map */
     int has_video_m3u8; /* has video stream m3u8 list */
@@ -944,7 +945,8 @@ static int hls_mux_init(AVFormatContext *s, VariantStream *vs)
         snprintf(period, sizeof(period), "%d", (INT_MAX / 2) - 1);
         av_dict_set(&options, "sdt_period", period, AV_DICT_DONT_OVERWRITE);
         av_dict_set(&options, "pat_period", period, AV_DICT_DONT_OVERWRITE);
-        av_dict_set(&options, "mpegts_flags", "-sdt+hls+align_frames", AV_DICT_DONT_OVERWRITE);
+        av_dict_set(&options, "mpegts_flags", "-sdt+hls+align_frames", AV_DICT_DONT_OVERWRITE);        
+        if (hls->max_delay_zero) oc->max_delay = 0;
     }
     ret = avformat_init_output(oc, &options);
     remaining_options = av_dict_count(options);
@@ -3184,6 +3186,7 @@ static const AVOption options[] = {
     {"timeout", "set timeout for socket I/O operations", OFFSET(timeout), AV_OPT_TYPE_DURATION, { .i64 = -1 }, -1, INT_MAX, .flags = E },
     {"ignore_io_errors", "Ignore IO errors for stable long-duration runs with network output", OFFSET(ignore_io_errors), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, E },
     {"headers", "set custom HTTP headers, can override built in default headers", OFFSET(headers), AV_OPT_TYPE_STRING, { .str = NULL }, 0, 0, E },
+    {"max_delay_zero", "Set max delay to zero.", OFFSET(max_delay_zero), AV_OPT_TYPE_BOOL, { .i64 = 1 }, 0, 1, E },
     { NULL },
 };
 

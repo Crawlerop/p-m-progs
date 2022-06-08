@@ -35,7 +35,7 @@
 #include "internal.h"
 #include "mpegts.h"
 
-#define PCR_TIME_BASE 27000000
+//#define ts->pcr_time_base 27000000
 
 /* write DVB SI sections */
 
@@ -124,6 +124,7 @@ typedef struct MpegTSWrite {
     int hls_start;
     int hls_resend;
     int resend_headers;    
+    int pcr_time_base;
     //int ts_align_frames;
 } MpegTSWrite;
 
@@ -921,7 +922,7 @@ invalid:
 
 static int64_t get_pcr(const MpegTSWrite *ts)
 {
-    return av_rescale(ts->total_size + 11, 8 * PCR_TIME_BASE, ts->mux_rate) +
+    return av_rescale(ts->total_size + 11, 8 * ts->pcr_time_base, ts->mux_rate) +
            ts->first_pcr;
 }
 
@@ -997,7 +998,7 @@ static void enable_pcr_generation_for_stream(AVFormatContext *s, AVStream *pcr_s
 
     if (ts->mux_rate > 1 || ts->pcr_period_ms >= 0) {
         int pcr_period_ms = ts->pcr_period_ms == -1 ? PCR_RETRANS_TIME : ts->pcr_period_ms;
-        ts_st->pcr_period = av_rescale(pcr_period_ms, PCR_TIME_BASE, 1000);
+        ts_st->pcr_period = av_rescale(pcr_period_ms, ts->pcr_time_base, 1000);
     } else {
         /* By default, for VBR we select the highest multiple of frame duration which is less than 100 ms. */
         int64_t frame_period = 0;
@@ -1007,12 +1008,12 @@ static void enable_pcr_generation_for_stream(AVFormatContext *s, AVStream *pcr_s
                av_log(s, AV_LOG_WARNING, "frame size not set\n");
                frame_size = 512;
             }
-            frame_period = av_rescale_rnd(frame_size, PCR_TIME_BASE, pcr_st->codecpar->sample_rate, AV_ROUND_UP);
+            frame_period = av_rescale_rnd(frame_size, ts->pcr_time_base, pcr_st->codecpar->sample_rate, AV_ROUND_UP);
         } else if (pcr_st->avg_frame_rate.num) {
-            frame_period = av_rescale_rnd(pcr_st->avg_frame_rate.den, PCR_TIME_BASE, pcr_st->avg_frame_rate.num, AV_ROUND_UP);
+            frame_period = av_rescale_rnd(pcr_st->avg_frame_rate.den, ts->pcr_time_base, pcr_st->avg_frame_rate.num, AV_ROUND_UP);
         }
-        if (frame_period > 0 && frame_period <= PCR_TIME_BASE / 10)
-            ts_st->pcr_period = frame_period * (PCR_TIME_BASE / 10 / frame_period);
+        if (frame_period > 0 && frame_period <= ts->pcr_time_base / 10)
+            ts_st->pcr_period = frame_period * (ts->pcr_time_base / 10 / frame_period);
         else
             ts_st->pcr_period = 1;
     }
@@ -1044,8 +1045,8 @@ static void select_pcr_streams(AVFormatContext *s)
             MpegTSWriteStream *ts_st = pcr_st->priv_data;
             service->pcr_pid = ts_st->pid;
             enable_pcr_generation_for_stream(s, pcr_st);
-            av_log(s, AV_LOG_VERBOSE, "service %i using PCR in pid=%i, pcr_period=%"PRId64"ms\n",
-                service->sid, service->pcr_pid, av_rescale(ts_st->pcr_period, 1000, PCR_TIME_BASE));
+            av_log(s, AV_LOG_VERBOSE, "service %i using PCR in pid=%i, pcr_period=%"PRId64"ms, pcr_time_base=%d\n",
+                service->sid, service->pcr_pid, av_rescale(ts_st->pcr_period, 1000, ts->pcr_time_base), ts->pcr_time_base);
         }
     }
 }
@@ -1228,15 +1229,17 @@ static int mpegts_init(AVFormatContext *s)
         }
     }
 
-    if (ts->copyts < 1)
-        ts->first_pcr = av_rescale(s->max_delay, PCR_TIME_BASE, AV_TIME_BASE);
+    if (ts->copyts < 1) {
+        ts->first_pcr = av_rescale(s->max_delay, ts->pcr_time_base, AV_TIME_BASE);
+        av_log(s, AV_LOG_TRACE, "first pcr=%ld, max delay=%d\n", ts->first_pcr, s->max_delay);
+    }
 
     select_pcr_streams(s);
 
     ts->last_pat_ts = AV_NOPTS_VALUE;
     ts->last_sdt_ts = AV_NOPTS_VALUE;
-    ts->pat_period = av_rescale(ts->pat_period_us, PCR_TIME_BASE, AV_TIME_BASE);
-    ts->sdt_period = av_rescale(ts->sdt_period_us, PCR_TIME_BASE, AV_TIME_BASE);
+    ts->pat_period = av_rescale(ts->pat_period_us, ts->pcr_time_base, AV_TIME_BASE);
+    ts->sdt_period = av_rescale(ts->sdt_period_us, ts->pcr_time_base, AV_TIME_BASE);
 
     if (ts->mux_rate == 1)
         av_log(s, AV_LOG_VERBOSE, "muxrate VBR, ");
@@ -1244,8 +1247,8 @@ static int mpegts_init(AVFormatContext *s)
         av_log(s, AV_LOG_VERBOSE, "muxrate %d, ", ts->mux_rate);
     av_log(s, AV_LOG_VERBOSE,
            "sdt every %"PRId64" ms, pat/pmt every %"PRId64" ms\n",
-           av_rescale(ts->sdt_period, 1000, PCR_TIME_BASE),
-           av_rescale(ts->pat_period, 1000, PCR_TIME_BASE));
+           av_rescale(ts->sdt_period, 1000, ts->pcr_time_base),
+           av_rescale(ts->pat_period, 1000, ts->pcr_time_base));
 
     return 0;
 }
@@ -1831,6 +1834,7 @@ static int mpegts_write_packet_internal(AVFormatContext *s, AVPacket *pkt)
         if (!ts->first_dts_checked && dts != AV_NOPTS_VALUE) {
             ts->first_pcr += dts * 300;
             ts->first_dts_checked = 1;
+            av_log(s, AV_LOG_TRACE, "first pcr=%ld, dts=%ld\n", ts->first_pcr, dts);
         }
 
         if (pts != AV_NOPTS_VALUE)
@@ -2263,7 +2267,7 @@ static const AVOption options[] = {
       0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_DISCONT }, 0, INT_MAX, ENC, "mpegts_flags" },
     { "sdt", "Enable SDT transmission",
       0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_ENABLE_SDT}, 0, INT_MAX, ENC, "mpegts_flags" },
-    { "hls", "Comply with HLS TS standards",
+    { "hls", "HLS TS muxing behavior",
       0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_HLS}, 0, INT_MAX, ENC, "mpegts_flags" },        
     { "align_frames", "Align MPEG-TS frames",
       0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_ALIGN_FRAMES}, 0, INT_MAX, ENC, "mpegts_flags" },
@@ -2279,6 +2283,8 @@ static const AVOption options[] = {
       OFFSET(pat_period_us), AV_OPT_TYPE_DURATION, { .i64 = PAT_RETRANS_TIME * 1000LL }, 0, INT64_MAX, ENC },
     { "sdt_period", "SDT retransmission time limit in seconds",
       OFFSET(sdt_period_us), AV_OPT_TYPE_DURATION, { .i64 = SDT_RETRANS_TIME * 1000LL }, 0, INT64_MAX, ENC },
+    { "pcr_time_base", "PCR time base",
+      OFFSET(pcr_time_base), AV_OPT_TYPE_INT, { .i64 = 27000000 }, 0, INT_MAX, ENC },
     { NULL },
 };
 
