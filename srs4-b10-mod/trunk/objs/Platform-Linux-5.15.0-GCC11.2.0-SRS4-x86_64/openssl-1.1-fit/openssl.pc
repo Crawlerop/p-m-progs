@@ -1,0 +1,9 @@
+prefix=/media/wrapper/OS/wserver4/p-m-progs2/srs-server-4.0-b10/trunk/objs/Platform-Linux-5.15.0-GCC11.2.0-SRS4-x86_64/openssl-1.1-fit/_release
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: OpenSSL
+Description: Secure Sockets Layer and cryptography libraries and tools
+Version: 1.1.1b
+Requires: libssl libcrypto
