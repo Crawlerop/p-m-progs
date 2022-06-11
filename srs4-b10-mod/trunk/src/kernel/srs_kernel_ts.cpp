@@ -577,6 +577,8 @@ srs_error_t SrsTsContext::encode_pes(ISrsStreamWriter* writer, SrsTsMessage* msg
             int64_t pcr = write_pcr? msg->dts : -1;
             
             // TODO: FIXME: finger it why use discontinuity of msg.
+            srs_trace("channel %x pes cc: %d", pid, channel->continuity_counter);
+
             pkt = SrsTsPacket::create_pes_first(this,
                 pid, msg->sid, channel->continuity_counter++, msg->is_discontinuity,
                 pcr, msg->dts, msg->pts, msg->payload->length()
@@ -2980,7 +2982,7 @@ srs_error_t SrsTsMessageCache::do_cache_aac(SrsAudioFrame* frame)
         // 6.2 Audio Data Transport Stream, ADTS
         // in ISO_IEC_13818-7-AAC-2004.pdf, page 26.
         // fixed 7bytes header
-        uint8_t adts_header[7] = {0xff, 0xf9, 0x00, 0x00, 0x00, 0x0f, 0xfc};
+        uint8_t adts_header[7] = {0xff, 0xf1, 0x00, 0x00, 0x00, 0x0f, 0xfc};
         /*
          // adts_fixed_header
          // 2B, 16bits
