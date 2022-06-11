@@ -577,7 +577,7 @@ srs_error_t SrsTsContext::encode_pes(ISrsStreamWriter* writer, SrsTsMessage* msg
             int64_t pcr = write_pcr? msg->dts : -1;
             
             // TODO: FIXME: finger it why use discontinuity of msg.
-            srs_trace("channel %x pes cc: %d", pid, channel->continuity_counter);
+            // srs_trace("channel %x pes cc: %d", pid, channel->continuity_counter);
 
             pkt = SrsTsPacket::create_pes_first(this,
                 pid, msg->sid, channel->continuity_counter++, msg->is_discontinuity,
