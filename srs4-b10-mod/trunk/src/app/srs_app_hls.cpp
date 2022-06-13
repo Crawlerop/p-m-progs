@@ -944,6 +944,10 @@ srs_error_t SrsHlsController::on_unpublish()
 {
     srs_error_t err = srs_success;
 
+    if ((err = muxer->align_frames()) != srs_success) {
+        return srs_error_wrap(err, "hls: mpegts align frames");
+    }   
+
     if ((err = muxer->flush_audio(tsmc)) != srs_success) {
         return srs_error_wrap(err, "hls: flush audio");
     }

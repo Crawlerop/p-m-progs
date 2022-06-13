@@ -254,6 +254,19 @@ srs_error_t SrsTsContext::align_frames(ISrsStreamWriter* writer) {
     return err;
 }
 
+srs_error_t SrsTsContext::align_frames(ISrsStreamWriter* writer, int16_t pid) {
+    srs_error_t err = srs_success;
+    #ifdef TS_ALIGN_FRAMES
+    SrsTsChannel *channel = get(pid);
+    if (channel && (channel->continuity_counter & 0xf) != 0) {
+        if ((err = af_padding(writer, channel, pid)) != srs_success) {
+            return err;
+        }
+    }
+    #endif
+    return err;
+}
+
 SrsTsChannel* SrsTsContext::get(int pid)
 {
     if (pids.find(pid) == pids.end()) {

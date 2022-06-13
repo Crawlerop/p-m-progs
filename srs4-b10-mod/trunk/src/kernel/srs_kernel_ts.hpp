@@ -324,6 +324,7 @@ public:
     virtual void reset();
     // Align TS frames
     virtual srs_error_t align_frames(ISrsStreamWriter* writer);
+    virtual srs_error_t align_frames(ISrsStreamWriter* writer, int16_t pid);
     // codec
 public:
     // Get the pid apply, the parsed pid.
