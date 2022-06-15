@@ -169,7 +169,7 @@ static int aacPlus_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
             return ret;
         
         pkt->size = aacplusEncEncodeW(s->aacplus_handle, input_buffer, frame->nb_samples*avctx->channels, pkt->data, pkt->size, frame->nb_samples<avctx->frame_size);      
-        av_log(avctx, AV_LOG_TRACE, "EncodeData: %d\n", pkt->size);
+        av_log(avctx, AV_LOG_TRACE, "EncodeData: %d, Input Size: %d, Padding Required: %d, Encoder Frame Size: %d\n", pkt->size, frame->nb_samples, frame->nb_samples<avctx->frame_size, avctx->frame_size);
     }
 
     *got_packet = 1;
