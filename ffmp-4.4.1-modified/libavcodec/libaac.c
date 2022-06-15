@@ -45,6 +45,7 @@ typedef struct aacPlusAudioContext {
     aacplusEncHandle aacplus_handle;
     unsigned long max_output_bytes;
     unsigned long samples_input;
+    // unsigned int blank_samples;
 
 #ifdef USE_AUDIOQUEUE
     AudioFrameQueue afq;
@@ -52,7 +53,8 @@ typedef struct aacPlusAudioContext {
 
 } aacPlusAudioContext;
 
-static const AVOption aac_enc_options[] = {    
+static const AVOption aac_enc_options[] = {   
+    // { "blank_samples", "Blank samples after encoding.", offsetof(aacPlusAudioContext, blank_samples), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 8, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_ENCODING_PARAM }, 
     FF_AAC_PROFILE_OPTS
     { NULL }
 };
@@ -99,6 +101,12 @@ static av_cold int aacPlus_encode_init(AVCodecContext *avctx)
     aacplus_cfg->outputFormat = !(avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER);
     aacplus_cfg->inputFormat = avctx->sample_fmt == AV_SAMPLE_FMT_FLT ? AACPLUS_INPUT_FLOAT : AACPLUS_INPUT_16BIT;
     
+    /*
+    if (s->blank_samples != -1) {
+        aacplus_cfg->
+    }
+    */
+
     if (avctx->profile == FF_PROFILE_AAC_HE) {
         aacplus_cfg->heV2Override = 0;
     } else if (avctx->profile == FF_PROFILE_AAC_HE_V2) {
@@ -112,7 +120,7 @@ static av_cold int aacPlus_encode_init(AVCodecContext *avctx)
 
     avctx->frame_size = s->samples_input / avctx->channels;
 #ifdef FRAME_DELAY
-    avctx->initial_padding = (avctx->profile == FF_PROFILE_AAC_LOW) ? avctx->frame_size*2 : avctx->frame_size*4;
+    avctx->initial_padding = (avctx->profile == FF_PROFILE_AAC_LOW) ? avctx->frame_size*2 : avctx->frame_size*3;
 #else
     avctx->initial_padding = aacplusEncGetDelay(s->aacplus_handle);
 #endif
