@@ -71,7 +71,7 @@ AacEncOpen ( struct AAC_ENCODER      *hAacEnc,       /* pointer to an encoder ha
              config->nChannelsOut < 1 || config->nChannelsOut > MAX_CHANNELS ||
              config->nChannelsIn  < config->nChannelsOut            ||
              (config->bitRate!=0 && (config->bitRate / config->nChannelsOut < 8000      ||
-                                    config->bitRate / config->nChannelsOut > 160000)));
+                                    config->bitRate / config->nChannelsOut > 192000)));
   }
   
   /* check sample rate */

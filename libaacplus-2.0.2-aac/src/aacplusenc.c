@@ -87,7 +87,7 @@ aacplusEncHandle aacplusEncOpenW(unsigned long sampleRate,
     aacp->encoderDelay = aac_plus ? (CORE_DELAY*2) : CORE_DELAY;
     aacp->encoderTotalDelay = aacp->encoderDelay * numChannels;
     aacp->is_aacplus = aac_plus;    
-    aacp->blank_samples_needed = 2;
+    aacp->blank_samples_needed = aac_plus ? 4 : 2;
 
     aacplusEncInitSBRAACRam(&aacp->aacEnc);
 //#ifdef _FFTW3
