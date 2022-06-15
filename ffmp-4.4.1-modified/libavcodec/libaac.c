@@ -112,7 +112,7 @@ static av_cold int aacPlus_encode_init(AVCodecContext *avctx)
 
     avctx->frame_size = s->samples_input / avctx->channels;
 #ifdef FRAME_DELAY
-    avctx->initial_padding = avctx->frame_size*2;
+    avctx->initial_padding = (avctx->profile == FF_PROFILE_AAC_LOW) ? avctx->frame_size*2 : avctx->frame_size*4;
 #else
     avctx->initial_padding = aacplusEncGetDelay(s->aacplus_handle);
 #endif
