@@ -102,15 +102,16 @@ typedef struct MpegTSWrite {
     int m2ts_textsub_pid;
 
     int pcr_period_ms;
-#define MPEGTS_FLAG_REEMIT_PAT_PMT  0x01
-#define MPEGTS_FLAG_AAC_LATM        0x02
+#define MPEGTS_FLAG_REEMIT_PAT_PMT              0x01
+#define MPEGTS_FLAG_AAC_LATM                    0x02
 #define MPEGTS_FLAG_PAT_PMT_AT_FRAMES           0x04
-#define MPEGTS_FLAG_SYSTEM_B        0x08
-#define MPEGTS_FLAG_DISCONT         0x10
-#define MPEGTS_FLAG_ENABLE_SDT      0x20
-#define MPEGTS_FLAG_HLS             0x40
-#define MPEGTS_FLAG_ALIGN_FRAMES    0x80
-#define MPEGTS_FLAG_PICASA    0x100
+#define MPEGTS_FLAG_SYSTEM_B                    0x08
+#define MPEGTS_FLAG_DISCONT                     0x10
+#define MPEGTS_FLAG_ENABLE_SDT                  0x20
+#define MPEGTS_FLAG_HLS                         0x40
+#define MPEGTS_FLAG_ALIGN_FRAMES                0x80
+#define MPEGTS_FLAG_PICASA                      0x100
+#define MPEGTS_FLAG_NO_RAM_KEYFRAME             0x200
     int flags;
     int copyts;
     int tables_version;
@@ -1531,7 +1532,7 @@ static void mpegts_write_pes(AVFormatContext *s, AVStream *st,
             // set Random Access for key frames
             if (ts_st->pcr_period)
                 write_pcr = 1;
-            if (!(ts->flags & MPEGTS_FLAG_HLS)) 
+            if (!(ts->flags & MPEGTS_FLAG_NO_RAM_KEYFRAME)) 
                 set_af_flag(buf, 0x40);
             q = get_ts_payload_start(buf);
         }
@@ -2269,6 +2270,8 @@ static const AVOption options[] = {
       0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_ENABLE_SDT}, 0, INT_MAX, ENC, "mpegts_flags" },
     { "hls", "HLS TS muxing behavior",
       0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_HLS}, 0, INT_MAX, ENC, "mpegts_flags" },        
+    { "no_ram_keyframes", "Don't set Random Access flag on each keyframes", 
+      0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_NO_RAM_KEYFRAME}, 0, INT_MAX, ENC, "mpegts_flags"},
     { "align_frames", "Align MPEG-TS frames",
       0, AV_OPT_TYPE_CONST, { .i64 = MPEGTS_FLAG_ALIGN_FRAMES}, 0, INT_MAX, ENC, "mpegts_flags" },
     { "picasa", "Encode MPEG-TS in Picasa format",

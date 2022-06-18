@@ -1096,14 +1096,14 @@ static av_cold int vaapi_encode_h264_configure(AVCodecContext *avctx)
         if (!driver)
             driver = "unknown driver";
 
-        len = snprintf(NULL, 0, "Copyright (c) 2022 Wrapper / VAAPI %s / %s", vaapi, driver);
+        len = snprintf(NULL, 0, "HW H.264 Encoder / VAAPI %s / %s", vaapi, driver);
         if (len >= 0) {
             priv->sei_identifier_string = av_malloc(len + 1);
             if (!priv->sei_identifier_string)
                 return AVERROR(ENOMEM);
 
             snprintf(priv->sei_identifier_string, len + 1,
-                     "Copyright (c) 2022 Wrapper / VAAPI %s / %s", vaapi, driver);
+                     "HW H.264 Encoder / VAAPI %s / %s", vaapi, driver);
 
             priv->sei_identifier.data        = priv->sei_identifier_string;
             priv->sei_identifier.data_length = len + 1;
@@ -1119,6 +1119,8 @@ static const VAAPIEncodeProfile vaapi_encode_h264_profiles[] = {
     { FF_PROFILE_H264_HIGH, 8, 3, 1, 1, VAProfileH264High },
     { FF_PROFILE_H264_MAIN, 8, 3, 1, 1, VAProfileH264Main },
     { FF_PROFILE_H264_CONSTRAINED_BASELINE,
+                            8, 3, 1, 1, VAProfileH264ConstrainedBaseline },
+    { FF_PROFILE_H264_BASELINE,
                             8, 3, 1, 1, VAProfileH264ConstrainedBaseline },
     { FF_PROFILE_UNKNOWN }
 };
@@ -1171,11 +1173,13 @@ static av_cold int vaapi_encode_h264_init(AVCodecContext *avctx)
 
     // Reject unsupported profiles.
     switch (avctx->profile) {
+    /*
     case FF_PROFILE_H264_BASELINE:
         av_log(avctx, AV_LOG_WARNING, "H.264 baseline profile is not "
                "supported, using constrained baseline profile instead.\n");
         avctx->profile = FF_PROFILE_H264_CONSTRAINED_BASELINE;
         break;
+    */
     case FF_PROFILE_H264_EXTENDED:
         av_log(avctx, AV_LOG_ERROR, "H.264 extended profile "
                "is not supported.\n");
@@ -1251,7 +1255,7 @@ static const AVOption vaapi_encode_h264_options[] = {
 
     { "sei", "Set SEI to include",
       OFFSET(sei), AV_OPT_TYPE_FLAGS,
-      { .i64 = SEI_IDENTIFIER | SEI_TIMING | SEI_RECOVERY_POINT },
+      { .i64 = SEI_TIMING | SEI_RECOVERY_POINT },
       0, INT_MAX, FLAGS, "sei" },
     { "identifier", "Include encoder version identifier",
       0, AV_OPT_TYPE_CONST, { .i64 = SEI_IDENTIFIER },
@@ -1269,6 +1273,7 @@ static const AVOption vaapi_encode_h264_options[] = {
 
 #define PROFILE(name, value)  name, NULL, 0, AV_OPT_TYPE_CONST, \
       { .i64 = value }, 0, 0, FLAGS, "profile"
+    { PROFILE("baseline",             FF_PROFILE_H264_BASELINE) },
     { PROFILE("constrained_baseline", FF_PROFILE_H264_CONSTRAINED_BASELINE) },
     { PROFILE("main",                 FF_PROFILE_H264_MAIN) },
     { PROFILE("high",                 FF_PROFILE_H264_HIGH) },
