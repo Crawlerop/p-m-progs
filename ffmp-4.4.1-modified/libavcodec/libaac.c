@@ -124,6 +124,7 @@ static av_cold int aacPlus_encode_init(AVCodecContext *avctx)
 #else
     avctx->initial_padding = aacplusEncGetDelay(s->aacplus_handle);
 #endif
+    av_log(avctx, AV_LOG_TRACE, "AAC Initial Padding: %d\n", avctx->initial_padding);
 
 #ifdef USE_AUDIOQUEUE
     ff_af_queue_init(avctx, &s->afq);
