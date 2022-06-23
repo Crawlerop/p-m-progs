@@ -80,6 +80,7 @@ aacplusEncHandle aacplusEncOpenW(unsigned long sampleRate,
     AacInitDefaultConfig(&aacp->config);
     aacp->config.nChannelsIn = numChannels;
     aacp->config.sampleRate = sampleRate;
+    aacp->config.psDelay = CORE_INPUT_OFFSET_PS;
     aacp->writeOffset = aac_plus ? (INPUT_DELAY*MAX_CHANNELS) : 0;
     //aacp->writeOffset = 0;
     //aacp->encoderDelay = aac_plus ? INPUT_DELAY : CORE_DELAY;
@@ -190,7 +191,7 @@ int aacplusEncSetConfigurationSBR(aacplusEncHandle hEncoder,
         aacp->useParametricStereo=1;
 
         aacp->envReadOffset = (MAX_DS_FILTER_DELAY + INPUT_DELAY)*MAX_CHANNELS;
-        aacp->coreWriteOffset = CORE_INPUT_OFFSET_PS;
+        aacp->coreWriteOffset = aacp->config.psDelay;
         aacp->writeOffset = aacp->envReadOffset;
     } else {
         /* set up 2:1 downsampling */
@@ -488,7 +489,7 @@ int aacplusEncEncodeW(aacplusEncHandle hEncoder, int32_t *inputBuffer, unsigned 
                     (unsigned *) (outputBuffer+adts_offset),
                     &numOutBytes);
         if (aacp->useParametricStereo) {
-            memcpy( aacp->inBuf,&aacp->inBuf[aacp->config.nSamplesPerFrame],CORE_INPUT_OFFSET_PS*sizeof(float));
+            memcpy( aacp->inBuf,&aacp->inBuf[aacp->config.nSamplesPerFrame],aacp->config.psDelay*sizeof(float));
         } else {
             memmove( aacp->inBuf,&aacp->inBuf[aacp->config.nSamplesPerFrame*2*MAX_CHANNELS],
                     aacp->writeOffset*sizeof(float));

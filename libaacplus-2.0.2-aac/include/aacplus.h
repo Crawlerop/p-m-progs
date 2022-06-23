@@ -26,7 +26,8 @@ typedef  struct {
   int   outputFormat;            ///< 0 - raw, 1 - adts
   int   nSamplesPerFrame;        ///< 1024 by default, (960 - for dab+/drm not working yet)
   int   inputSamples;            ///< number of input samples to use, usable after aacplusEncSetConfiguration() call
-  int   heV2Override;  
+  int   heV2Override; 
+  int   psDelay; 
 } aacplusEncConfiguration;
 
 aacplusEncConfiguration *aacplusEncGetCurrentConfiguration(aacplusEncHandle hEncoder);
