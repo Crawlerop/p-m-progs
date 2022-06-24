@@ -81,6 +81,7 @@ aacplusEncHandle aacplusEncOpenW(unsigned long sampleRate,
     aacp->config.nChannelsIn = numChannels;
     aacp->config.sampleRate = sampleRate;
     aacp->config.psDelay = CORE_INPUT_OFFSET_PS;
+    aacp->config.rsDelay = MAX_DS_FILTER_DELAY;
     aacp->writeOffset = aac_plus ? (INPUT_DELAY*MAX_CHANNELS) : 0;
     //aacp->writeOffset = 0;
     //aacp->encoderDelay = aac_plus ? INPUT_DELAY : CORE_DELAY;
@@ -190,7 +191,7 @@ int aacplusEncSetConfigurationSBR(aacplusEncHandle hEncoder,
         aacp->config.nChannelsOut=1;
         aacp->useParametricStereo=1;
 
-        aacp->envReadOffset = (MAX_DS_FILTER_DELAY + INPUT_DELAY)*MAX_CHANNELS;
+        aacp->envReadOffset = (aacp->config.rsDelay + INPUT_DELAY)*MAX_CHANNELS;
         aacp->coreWriteOffset = aacp->config.psDelay;
         aacp->writeOffset = aacp->envReadOffset;
     } else {
@@ -198,7 +199,7 @@ int aacplusEncSetConfigurationSBR(aacplusEncHandle hEncoder,
         InitIIR21_Resampler(&aacp->IIR21_reSampler[0]);
         InitIIR21_Resampler(&aacp->IIR21_reSampler[1]);
 
-        assert(aacp->IIR21_reSampler[0].delay <= MAX_DS_FILTER_DELAY);
+        assert(aacp->IIR21_reSampler[0].delay <= aacp->config.rsDelay);
         aacp->writeOffset += aacp->IIR21_reSampler[0].delay*MAX_CHANNELS;
     }
 

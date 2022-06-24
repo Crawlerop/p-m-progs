@@ -28,6 +28,7 @@ typedef  struct {
   int   inputSamples;            ///< number of input samples to use, usable after aacplusEncSetConfiguration() call
   int   heV2Override; 
   int   psDelay; 
+  int   rsDelay;
 } aacplusEncConfiguration;
 
 aacplusEncConfiguration *aacplusEncGetCurrentConfiguration(aacplusEncHandle hEncoder);

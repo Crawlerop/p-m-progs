@@ -46,7 +46,8 @@ typedef struct aacPlusAudioContext {
     unsigned long max_output_bytes;
     unsigned long samples_input;
     // unsigned int blank_samples;
-    unsigned int ps_delay;
+    int ps_delay;
+    int rs_delay;
 
 #ifdef USE_AUDIOQUEUE
     AudioFrameQueue afq;
@@ -57,6 +58,7 @@ typedef struct aacPlusAudioContext {
 static const AVOption aac_enc_options[] = {   
     // { "blank_samples", "Blank samples after encoding.", offsetof(aacPlusAudioContext, blank_samples), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 8, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_ENCODING_PARAM },
     { "ps_delay", "Delay between PS samples.", offsetof(aacPlusAudioContext, ps_delay), AV_OPT_TYPE_INT, { .i64 = 0 }, -4096, 4096, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_ENCODING_PARAM }, 
+    { "rs_delay", "Delay between SBR resampling.", offsetof(aacPlusAudioContext, rs_delay), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 2048, AV_OPT_FLAG_AUDIO_PARAM | AV_OPT_FLAG_ENCODING_PARAM }, 
     FF_AAC_PROFILE_OPTS
     { NULL }
 };
@@ -103,6 +105,7 @@ static av_cold int aacPlus_encode_init(AVCodecContext *avctx)
     aacplus_cfg->outputFormat = !(avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER);
     aacplus_cfg->inputFormat = avctx->sample_fmt == AV_SAMPLE_FMT_FLT ? AACPLUS_INPUT_FLOAT : AACPLUS_INPUT_16BIT;
     aacplus_cfg->psDelay = s->ps_delay;
+    if (s->rs_delay >= 0) aacplus_cfg->rsDelay = s->rs_delay;
 
     /*
     if (s->blank_samples != -1) {
@@ -258,6 +261,11 @@ static av_cold int aacPlus_encode_close(AVCodecContext *avctx)
     return 0;
 }
 
+static const AVCodecDefault defaults[] = {
+    { "b", "128000" },
+    { NULL }
+};
+
 static const AVProfile profiles[] = {
     { FF_PROFILE_AAC_LOW,   "LC"       },
     { FF_PROFILE_AAC_HE,    "HE-AAC"   },
@@ -284,6 +292,7 @@ AVCodec ff_libaacplus_encoder = {
     .init           = aacPlus_encode_init,
     .encode2        = aacPlus_encode_frame,
     .close          = aacPlus_encode_close,
+    .defaults       = defaults,
     .sample_fmts    = (const enum AVSampleFormat[]){ AV_SAMPLE_FMT_S16,
                                                      AV_SAMPLE_FMT_FLT,
                                                      AV_SAMPLE_FMT_NONE },
