@@ -2132,22 +2132,18 @@ static void mpegts_write_flush(AVFormatContext *s)
             ts_st->payload_size = 0;
             ts_st->opus_queued_samples = 0;
         }
+
+        if (ts->flags & MPEGTS_FLAG_ALIGN_FRAMES) {
+            while (ts_st->cc != 15) {
+                mpegts_insert_padding(s, st);
+            }            
+        }
     }
 
     if (ts->m2ts_mode) {
         int packets = (avio_tell(s->pb) / (TS_PACKET_SIZE + 4)) % 32;
         while (packets++ < 32)
             mpegts_insert_null_packet(s);
-    }
-
-    if (ts->flags & MPEGTS_FLAG_ALIGN_FRAMES) {
-        for (i = 0; i < s->nb_streams; i++) {
-            AVStream *st = s->streams[i];
-            MpegTSWriteStream *ts_st = st->priv_data;
-            while (ts_st->cc != 15) {
-                mpegts_insert_padding(s, st);
-            }
-        }
     }
 }
 
