@@ -87,6 +87,10 @@ static av_cold int aacPlus_encode_init(AVCodecContext *avctx)
         return AVERROR(EINVAL);
     }
 
+    if (avctx->profile == FF_PROFILE_AAC_HE_V2 && avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL) {
+        av_log(avctx, AV_LOG_ERROR, "eAAC+ encoder is currently experimental and sounds worse compare to AAC+. To use it anyways, set -strict to experimental.\n");
+        return AVERROR_EXPERIMENTAL;
+    }
     //s->aacplus_handle = aacplusEncOpen(avctx->sample_rate, avctx->channels,
     //                                   &s->samples_input, &s->max_output_bytes);
     s->aacplus_handle = aacplusEncOpenW(avctx->sample_rate, avctx->channels,
