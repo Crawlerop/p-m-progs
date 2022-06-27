@@ -136,18 +136,19 @@ int ff_hls_write_file_entry(AVIOContext *out, int insert_discont,
                             const char *baseurl /* Ignored if NULL */,
                             const char *filename, double *prog_date_time,
                             int64_t video_keyframe_size, int64_t video_keyframe_pos,
-                            int iframe_mode)
-{
+                            int iframe_mode, const char *segment_desc)
+{    
     if (!out || !filename)
         return AVERROR(EINVAL);
 
     if (insert_discont) {
         avio_printf(out, "#EXT-X-DISCONTINUITY\n");
     }
+    
     if (round_duration)
-        avio_printf(out, "#EXTINF:%ld,\n",  lrint(duration));
+        avio_printf(out, "#EXTINF:%ld, %s\n",  lrint(duration), segment_desc);
     else
-        avio_printf(out, "#EXTINF:%f,\n", duration);
+        avio_printf(out, "#EXTINF:%f, %s\n", duration, segment_desc);
     if (byterange_mode)
         avio_printf(out, "#EXT-X-BYTERANGE:%"PRId64"@%"PRId64"\n", iframe_mode ? video_keyframe_size : size,
                     iframe_mode ? video_keyframe_pos : pos);

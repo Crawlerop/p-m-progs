@@ -945,7 +945,7 @@ static int hls_mux_init(AVFormatContext *s, VariantStream *vs)
         snprintf(period, sizeof(period), "%d", (INT_MAX / 2) - 1);
         av_dict_set(&options, "sdt_period", period, AV_DICT_DONT_OVERWRITE);
         av_dict_set(&options, "pat_period", period, AV_DICT_DONT_OVERWRITE);
-        av_dict_set(&options, "mpegts_flags", "-sdt+hls+align_frames", AV_DICT_DONT_OVERWRITE);        
+        av_dict_set(&options, "mpegts_flags", "-sdt+hls+align_frames", AV_DICT_APPEND);        
         if (hls->max_delay_zero) oc->max_delay = 0;
     }
     ret = avformat_init_output(oc, &options);
@@ -1561,6 +1561,9 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
     double *prog_date_time_p = (hls->flags & HLS_PROGRAM_DATE_TIME) ? &prog_date_time : NULL;
     int byterange_mode = (hls->flags & HLS_SINGLE_FILE) || (hls->max_seg_size > 0);
 
+    AVDictionaryEntry *segment_desc_dict = av_dict_get(s->metadata, "description", NULL, 0);
+    const char *segment_desc = segment_desc_dict ? segment_desc_dict->value : "";
+
     hls->version = 3;
     if (byterange_mode) {
         hls->version = 4;
@@ -1629,7 +1632,7 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
                                       en->size, en->pos, hls->baseurl,
                                       en->filename,
                                       en->discont_program_date_time ? &en->discont_program_date_time : prog_date_time_p,
-                                      en->keyframe_size, en->keyframe_pos, hls->flags & HLS_I_FRAMES_ONLY);
+                                      en->keyframe_size, en->keyframe_pos, hls->flags & HLS_I_FRAMES_ONLY, segment_desc);
         if (en->discont_program_date_time)
             en->discont_program_date_time -= en->duration;
         if (ret < 0) {
@@ -1652,7 +1655,7 @@ static int hls_window(AVFormatContext *s, int last, VariantStream *vs)
         for (en = vs->segments; en; en = en->next) {
             ret = ff_hls_write_file_entry(hls->sub_m3u8_out, 0, byterange_mode,
                                           en->duration, 0, en->size, en->pos,
-                                          hls->baseurl, en->sub_filename, NULL, 0, 0, 0);
+                                          hls->baseurl, en->sub_filename, NULL, 0, 0, 0, segment_desc);
             if (ret < 0) {
                 av_log(s, AV_LOG_WARNING, "ff_hls_write_file_entry get error\n");
             }
