@@ -271,7 +271,7 @@ static int mpegts_write_section1(MpegTSSection *s, int tid, int id,
     /* reserved_future_use field must be set to 1 for SDT */
     unsigned int flags = tid == SDT_TID ? 0xf000 : 0xb000;
 
-    if ((ts->flags & MPEGTS_FLAG_HLS) && !ts->hls_resend) return 0;
+    //if ((ts->flags & MPEGTS_FLAG_HLS) && !ts->hls_resend) return 0;
 
     tot_len = 3 + 5 + len + 4;
     /* check if not too big */
@@ -305,7 +305,7 @@ static int mpegts_write_section1(MpegTSSection *s, int tid, int id,
 /*********************************************/
 /* mpegts writer */
 
-#define DEFAULT_PROVIDER_NAME   "FFmpeg"
+#define DEFAULT_PROVIDER_NAME   "Aurora"
 #define DEFAULT_SERVICE_NAME    "Service"
 
 /* we retransmit the SI info at this rate */
@@ -1259,6 +1259,8 @@ static void retransmit_si_info(AVFormatContext *s, int force_pat, int force_sdt,
 {
     MpegTSWrite *ts = s->priv_data;
     int i;
+
+    if ((ts->flags & MPEGTS_FLAG_HLS) && !ts->hls_resend) return;
 
     if ((pcr != AV_NOPTS_VALUE && ts->last_sdt_ts == AV_NOPTS_VALUE) ||
         (pcr != AV_NOPTS_VALUE && pcr - ts->last_sdt_ts >= ts->sdt_period) ||

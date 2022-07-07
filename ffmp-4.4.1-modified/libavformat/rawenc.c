@@ -339,7 +339,7 @@ static int h264_check_bitstream(struct AVFormatContext *s, const AVPacket *pkt)
 AVOutputFormat ff_h264_muxer = {
     .name              = "h264",
     .long_name         = NULL_IF_CONFIG_SMALL("raw H.264 video"),
-    .extensions        = "h264,264",
+    .extensions        = "h264,264,avc",
     .audio_codec       = AV_CODEC_ID_NONE,
     .video_codec       = AV_CODEC_ID_H264,
     .init              = force_one_stream,
