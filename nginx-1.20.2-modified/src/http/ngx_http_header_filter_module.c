@@ -46,7 +46,7 @@ ngx_module_t  ngx_http_header_filter_module = {
 };
 
 
-static u_char ngx_http_server_string[] = "Server: nginx" CRLF;
+static u_char ngx_http_server_string[] = "Server: unifsvr" CRLF;
 static u_char ngx_http_server_full_string[] = "Server: " NGINX_VER CRLF;
 static u_char ngx_http_server_build_string[] = "Server: " NGINX_VER_BUILD CRLF;
 
@@ -60,16 +60,15 @@ static ngx_str_t ngx_http_status_lines[] = {
     ngx_string("204 No Content"),
     ngx_null_string,  /* "205 Reset Content" */
     ngx_string("206 Partial Content"),
+    ngx_string("207 Multi-Status"),
 
-    /* ngx_null_string, */  /* "207 Multi-Status" */
-
-#define NGX_HTTP_LAST_2XX  207
+#define NGX_HTTP_LAST_2XX  208
 #define NGX_HTTP_OFF_3XX   (NGX_HTTP_LAST_2XX - 200)
 
-    /* ngx_null_string, */  /* "300 Multiple Choices" */
+    /* ngx_null_string, */  /* "300 Multiple Choices ( Special response )" */
 
     ngx_string("301 Moved Permanently"),
-    ngx_string("302 Moved Temporarily"),
+    ngx_string("302 Found"),
     ngx_string("303 See Other"),
     ngx_string("304 Not Modified"),
     ngx_null_string,  /* "305 Use Proxy" */
@@ -85,7 +84,7 @@ static ngx_str_t ngx_http_status_lines[] = {
     ngx_string("402 Payment Required"),
     ngx_string("403 Forbidden"),
     ngx_string("404 Not Found"),
-    ngx_string("405 Not Allowed"),
+    ngx_string("405 Method Not Allowed"),
     ngx_string("406 Not Acceptable"),
     ngx_null_string,  /* "407 Proxy Authentication Required" */
     ngx_string("408 Request Time-out"),
@@ -93,22 +92,22 @@ static ngx_str_t ngx_http_status_lines[] = {
     ngx_string("410 Gone"),
     ngx_string("411 Length Required"),
     ngx_string("412 Precondition Failed"),
-    ngx_string("413 Request Entity Too Large"),
-    ngx_string("414 Request-URI Too Large"),
+    ngx_string("413 Payload Too Large"),
+    ngx_string("414 URI Too Long"),
     ngx_string("415 Unsupported Media Type"),
-    ngx_string("416 Requested Range Not Satisfiable"),
-    ngx_null_string,  /* "417 Expectation Failed" */
+    ngx_string("416 Range Not Satisfiable"),
+    ngx_string("417 Expectation Failed"),  /* "417 Expectation Failed" */
     ngx_null_string,  /* "418 unused" */
     ngx_null_string,  /* "419 unused" */
-    ngx_null_string,  /* "420 unused" */
+    ngx_string("420 Rate-Limited"),  /* "420 unused" */
     ngx_string("421 Misdirected Request"),
-    ngx_null_string,  /* "422 Unprocessable Entity" */
-    ngx_null_string,  /* "423 Locked" */
-    ngx_null_string,  /* "424 Failed Dependency" */
-    ngx_null_string,  /* "425 unused" */
-    ngx_null_string,  /* "426 Upgrade Required" */
+    ngx_string("422 Unprocessable Entity"),  /* "422 Unprocessable Entity" */
+    ngx_string("423 Locked"),  /* "423 Locked" */
+    ngx_string("424 Failed Dependency"),  /* "424 Failed Dependency" */
+    ngx_string("425 Too Early"),  /* "425 Too Early" */
+    ngx_string("426 Upgrade Required"),  /* "426 Upgrade Required" */
     ngx_null_string,  /* "427 unused" */
-    ngx_null_string,  /* "428 Precondition Required" */
+    ngx_string("428 Precondition Required"),  /* "428 Precondition Required" */
     ngx_string("429 Too Many Requests"),
 
 #define NGX_HTTP_LAST_4XX  430
@@ -117,17 +116,18 @@ static ngx_str_t ngx_http_status_lines[] = {
     ngx_string("500 Internal Server Error"),
     ngx_string("501 Not Implemented"),
     ngx_string("502 Bad Gateway"),
-    ngx_string("503 Service Temporarily Unavailable"),
-    ngx_string("504 Gateway Time-out"),
+    ngx_string("503 Service Unavailable"),
+    ngx_string("504 Gateway Timeout"),
     ngx_string("505 HTTP Version Not Supported"),
     ngx_null_string,        /* "506 Variant Also Negotiates" */
     ngx_string("507 Insufficient Storage"),
 
-    /* ngx_null_string, */  /* "508 unused" */
-    /* ngx_null_string, */  /* "509 unused" */
-    /* ngx_null_string, */  /* "510 Not Extended" */
+    ngx_string("508 Loop Detected"),  /* "508 Loop Detected" */
+    ngx_null_string,  /* "509 unused" */
+    ngx_string("510 Not Extended"),  /* "510 Not Extended" */
+    ngx_string("511 Network Authentication Required")  /* "511 Network Authentication Required" */
 
-#define NGX_HTTP_LAST_5XX  508
+#define NGX_HTTP_LAST_5XX  512
 
 };
 

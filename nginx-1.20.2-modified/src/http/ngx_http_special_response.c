@@ -33,7 +33,7 @@ static u_char ngx_http_error_build_tail[] =
 
 
 static u_char ngx_http_error_tail[] =
-"<hr><center>nginx</center>" CRLF
+//"<hr><center>nginx</center>" CRLF
 "</body>" CRLF
 "</html>" CRLF
 ;
@@ -139,9 +139,9 @@ static char ngx_http_error_404_page[] =
 
 static char ngx_http_error_405_page[] =
 "<html>" CRLF
-"<head><title>405 Not Allowed</title></head>" CRLF
+"<head><title>405 Method Not Allowed</title></head>" CRLF
 "<body>" CRLF
-"<center><h1>405 Not Allowed</h1></center>" CRLF
+"<center><h1>405 Method Not Allowed</h1></center>" CRLF
 ;
 
 
@@ -195,17 +195,17 @@ static char ngx_http_error_412_page[] =
 
 static char ngx_http_error_413_page[] =
 "<html>" CRLF
-"<head><title>413 Request Entity Too Large</title></head>" CRLF
+"<head><title>413 Payload Too Large</title></head>" CRLF
 "<body>" CRLF
-"<center><h1>413 Request Entity Too Large</h1></center>" CRLF
+"<center><h1>413 Payload Too Large</h1></center>" CRLF
 ;
 
 
 static char ngx_http_error_414_page[] =
 "<html>" CRLF
-"<head><title>414 Request-URI Too Large</title></head>" CRLF
+"<head><title>414 URI Too Long</title></head>" CRLF
 "<body>" CRLF
-"<center><h1>414 Request-URI Too Large</h1></center>" CRLF
+"<center><h1>414 URI Too Long</h1></center>" CRLF
 ;
 
 
@@ -219,9 +219,9 @@ static char ngx_http_error_415_page[] =
 
 static char ngx_http_error_416_page[] =
 "<html>" CRLF
-"<head><title>416 Requested Range Not Satisfiable</title></head>" CRLF
+"<head><title>416 Range Not Satisfiable</title></head>" CRLF
 "<body>" CRLF
-"<center><h1>416 Requested Range Not Satisfiable</h1></center>" CRLF
+"<center><h1>416 Range Not Satisfiable</h1></center>" CRLF
 ;
 
 
@@ -307,9 +307,9 @@ static char ngx_http_error_502_page[] =
 
 static char ngx_http_error_503_page[] =
 "<html>" CRLF
-"<head><title>503 Service Temporarily Unavailable</title></head>" CRLF
+"<head><title>503 Service Unavailable</title></head>" CRLF
 "<body>" CRLF
-"<center><h1>503 Service Temporarily Unavailable</h1></center>" CRLF
+"<center><h1>503 Service Unavailable</h1></center>" CRLF
 ;
 
 

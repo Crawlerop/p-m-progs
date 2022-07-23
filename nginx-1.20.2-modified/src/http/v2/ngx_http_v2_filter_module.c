@@ -191,7 +191,7 @@ ngx_http_v2_header_filter(ngx_http_request_t *r)
     ngx_http_core_srv_conf_t  *cscf;
     u_char                     addr[NGX_SOCKADDR_STRLEN];
 
-    static const u_char nginx[5] = "\x84\xaa\x63\x55\xe7";
+    //static const u_char nginx[5] = "\x84\xaa\x63\x55\xe7";
 #if (NGX_HTTP_GZIP)
     static const u_char accept_encoding[12] =
         "\x8b\x84\x84\x2d\x69\x5b\x05\x44\x3c\x86\xaa\x6f";
@@ -309,7 +309,8 @@ ngx_http_v2_header_filter(ngx_http_request_t *r)
             len += 1 + nginx_ver_build_len;
 
         } else {
-            len += 1 + sizeof(nginx);
+            //len += 1 + sizeof(nginx);
+            len += 8;
         }
     }
 
@@ -517,7 +518,7 @@ ngx_http_v2_header_filter(ngx_http_request_t *r)
             pos = ngx_http_v2_write_header_str("server", NGINX_VER_BUILD);
 
         } else {
-            pos = ngx_http_v2_write_header_str("server", "nginx");
+            pos = ngx_http_v2_write_header_str("server", "unifsvr");
         }
     }
 

@@ -1553,7 +1553,7 @@ ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t *u)
     }
 
     if (rc == NGX_DECLINED) {
-        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
+        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_DOWN);
         return;
     }
 
@@ -1668,7 +1668,7 @@ ngx_http_upstream_ssl_init_connection(ngx_http_request_t *r,
     ngx_http_core_loc_conf_t  *clcf;
 
     if (ngx_http_upstream_test_connect(c) != NGX_OK) {
-        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
+        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_DOWN);
         return;
     }
 
@@ -1794,7 +1794,7 @@ ngx_http_upstream_ssl_handshake(ngx_http_request_t *r, ngx_http_upstream_t *u,
 
 failed:
 
-    ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
+    ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_DOWN);
 }
 
 
@@ -2018,7 +2018,7 @@ ngx_http_upstream_send_request(ngx_http_request_t *r, ngx_http_upstream_t *u,
     }
 
     if (!u->request_sent && ngx_http_upstream_test_connect(c) != NGX_OK) {
-        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
+        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_DOWN);
         return;
     }
 
@@ -2027,7 +2027,7 @@ ngx_http_upstream_send_request(ngx_http_request_t *r, ngx_http_upstream_t *u,
     rc = ngx_http_upstream_send_request_body(r, u, do_write);
 
     if (rc == NGX_ERROR) {
-        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
+        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_DOWN);
         return;
     }
 
@@ -2313,7 +2313,7 @@ ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_upstream_t *u)
     }
 
     if (!u->request_sent && ngx_http_upstream_test_connect(c) != NGX_OK) {
-        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
+        ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_DOWN);
         return;
     }
 
@@ -3640,7 +3640,7 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
 
                 if (upstream->read->error || u->error) {
                     ngx_http_upstream_finalize_request(r, u,
-                                                       NGX_HTTP_BAD_GATEWAY);
+                                                       NGX_HTTP_SERVICE_UNAVAILABLE);
                     return;
                 }
 
@@ -4215,7 +4215,7 @@ ngx_http_upstream_next(ngx_http_request_t *r, ngx_http_upstream_t *u,
                       "upstream timed out");
     }
 
-    if (u->peer.cached && ft_type == NGX_HTTP_UPSTREAM_FT_ERROR) {
+    if (u->peer.cached && (ft_type == NGX_HTTP_UPSTREAM_FT_DOWN || ft_type == NGX_HTTP_UPSTREAM_FT_ERROR)) {
         /* TODO: inform balancer instead */
         u->peer.tries++;
     }
@@ -4253,7 +4253,7 @@ ngx_http_upstream_next(ngx_http_request_t *r, ngx_http_upstream_t *u,
      */
 
     default:
-        status = NGX_HTTP_BAD_GATEWAY;
+        status = (ft_type == NGX_HTTP_UPSTREAM_FT_DOWN || ft_type == NGX_HTTP_UPSTREAM_FT_NOLIVE) ? NGX_HTTP_SERVICE_UNAVAILABLE : NGX_HTTP_BAD_GATEWAY;
     }
 
     if (r->connection->error) {
